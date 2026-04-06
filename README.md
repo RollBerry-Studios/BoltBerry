@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="resources/icons/512x512.png" alt="BoltBerry Logo" width="120">
+  <img src="src/renderer/assets/boltberry-logo-wide.png" alt="BoltBerry Logo" width="300">
 </p>
 
 <h1 align="center">BoltBerry</h1>

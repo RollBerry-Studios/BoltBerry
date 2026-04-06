@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Stage, Layer, Image as KonvaImage } from 'react-konva'
 import Konva from 'konva'
 import type { PlayerFullState, PlayerTokenState, FogDelta, PlayerMapState, PlayerPointer, PlayerCamera, PlayerOverlay, PlayerInitiativeEntry, WeatherType } from '@shared/ipc-types'
@@ -8,6 +9,7 @@ import { applyOpToCtxPair } from './components/canvas/FogLayer'
 type Mode = 'idle' | 'map' | 'atmosphere' | 'blackout'
 
 export default function PlayerApp() {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<Mode>('idle')
   const [mapState, setMapState] = useState<PlayerMapState | null>(null)
   const [atmospherePath, setAtmospherePath] = useState<string | null>(null)

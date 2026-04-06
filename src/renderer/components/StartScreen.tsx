@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useCampaignStore } from '../stores/campaignStore'
 import type { Campaign } from '@shared/ipc-types'
 import logoWide from '../assets/boltberry-logo-wide.png'
 
 export function StartScreen() {
+  const { t } = useTranslation()
   const { campaigns, setActiveCampaign, addCampaign } = useCampaignStore()
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -52,7 +54,6 @@ export function StartScreen() {
       gap: 'var(--sp-6)',
       background: 'var(--bg-base)',
     }}>
-      {/* Logo / Title */}
       <div style={{ textAlign: 'center' }}>
         <img
           src={logoWide}
@@ -76,11 +77,10 @@ export function StartScreen() {
           BoltBerry
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginTop: 'var(--sp-1)' }}>
-          Dein lokales Virtual Tabletop
+          {t('app.tagline')}
         </p>
       </div>
 
-      {/* Campaign list */}
       <div style={{
         width: 440,
         background: 'var(--bg-surface)',
@@ -91,8 +91,8 @@ export function StartScreen() {
         {campaigns.length === 0 ? (
           <div className="empty-state" style={{ padding: 'var(--sp-8)' }}>
             <div className="empty-state-icon">📜</div>
-            <div className="empty-state-title">Noch keine Kampagnen</div>
-            <div className="empty-state-desc">Erstelle deine erste Kampagne und leg los</div>
+            <div className="empty-state-title">{t('startScreen.noCampaigns')}</div>
+            <div className="empty-state-desc">{t('startScreen.noCampaignsDesc')}</div>
           </div>
         ) : (
           <div>
@@ -105,7 +105,7 @@ export function StartScreen() {
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
             }}>
-              Zuletzt verwendet
+              {t('startScreen.recentlyUsed')}
             </div>
             {campaigns.map((c) => (
               <div
@@ -138,12 +138,14 @@ export function StartScreen() {
                   <div>
                     <div style={{ fontWeight: 500 }}>{c.name}</div>
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                      Zuletzt: {new Date(c.lastOpened).toLocaleDateString('de-DE')}
+                      {t('startScreen.lastOpened', {
+                        date: new Date(c.lastOpened).toLocaleDateString(),
+                      })}
                     </div>
                   </div>
                 </button>
                 <button
-                  title="Kampagne duplizieren"
+                  title={t('startScreen.duplicateCampaign')}
                   onClick={() => handleDuplicate(c.id)}
                   disabled={duplicating === c.id}
                   style={{
@@ -165,14 +167,13 @@ export function StartScreen() {
           </div>
         )}
 
-        {/* Create new */}
         <div style={{ padding: 'var(--sp-3) var(--sp-4)' }}>
           {creating ? (
             <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
               <input
                 className="input"
                 autoFocus
-                placeholder="Kampagnen-Name..."
+                placeholder={t('startScreen.campaignNamePlaceholder')}
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
@@ -180,7 +181,9 @@ export function StartScreen() {
                   if (e.key === 'Escape') { setCreating(false); setNewName('') }
                 }}
               />
-              <button className="btn btn-primary" onClick={handleCreate}>Erstellen</button>
+              <button className="btn btn-primary" onClick={handleCreate}>
+                {t('startScreen.create')}
+              </button>
             </div>
           ) : (
             <button
@@ -188,7 +191,7 @@ export function StartScreen() {
               style={{ width: '100%', justifyContent: 'center' }}
               onClick={() => setCreating(true)}
             >
-              + Neue Kampagne
+              {t('startScreen.newCampaign')}
             </button>
           )}
         </div>

@@ -1,17 +1,17 @@
-import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useUIStore } from '../stores/uiStore'
 import { useInitiativeStore } from '../stores/initiativeStore'
 import { useAppStore } from '../stores/appStore'
 import { useCampaignStore } from '../stores/campaignStore'
 
 export function StatusBar() {
+  const { t, i18n } = useTranslation()
   const { playerConnected, blackoutActive, sessionMode } = useUIStore()
   const { entries, round } = useInitiativeStore()
   const { saveState, lastSaved } = useAppStore()
   const { activeCampaignId } = useCampaignStore()
   const current = entries.find((e) => e.currentTurn)
 
-  // Export/Import handlers accessible from statusbar
   async function handleExport() {
     if (!activeCampaignId || !window.electronAPI) return
     useAppStore.getState().setSaving()
@@ -42,7 +42,6 @@ export function StatusBar() {
     if (!window.electronAPI) return
     const result = await window.electronAPI.importCampaign() as { success: boolean; campaignId?: number; error?: string; canceled?: boolean }
     if (result.success && result.campaignId) {
-      // Reload campaign list
       const campaigns = await window.electronAPI.dbQuery<{
         id: number; name: string; created_at: string; last_opened: string
       }>('SELECT * FROM campaigns ORDER BY last_opened DESC')
@@ -56,87 +55,85 @@ export function StatusBar() {
 
   const saveLabel = (() => {
     switch (saveState) {
-      case 'saving': return { text: '💾 Speichert…', color: 'var(--warning)' }
-      case 'saved':  return { text: '✓ Gespeichert', color: 'var(--success)' }
-      case 'error':  return { text: '⚠ Fehler', color: 'var(--danger)' }
+      case 'saving': return { text: t('statusBar.saving'), color: 'var(--warning)' }
+      case 'saved':  return { text: t('statusBar.saved'),  color: 'var(--success)' }
+      case 'error':  return { text: t('statusBar.saveError'), color: 'var(--danger)' }
       default:
         return lastSaved
-          ? { text: `Zuletzt: ${lastSaved.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`, color: 'var(--text-muted)' }
-          : { text: 'Autosave aktiv', color: 'var(--text-muted)' }
+          ? {
+              text: t('statusBar.lastSaved', {
+                time: lastSaved.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' }),
+              }),
+              color: 'var(--text-muted)',
+            }
+          : { text: t('statusBar.autosave'), color: 'var(--text-muted)' }
     }
   })()
 
   return (
     <div className="statusbar">
-      {/* Player monitor status */}
       <div className="statusbar-item">
         <div className={`statusbar-dot ${playerConnected ? 'connected' : 'disconnected'}`} />
-        <span>{playerConnected ? 'Spieler-Monitor verbunden' : 'Kein Spieler-Monitor'}</span>
+        <span>{playerConnected ? t('statusBar.playerConnected') : t('statusBar.playerDisconnected')}</span>
       </div>
 
-      {/* Prep mode indicator */}
       {sessionMode === 'prep' && (
         <div className="statusbar-item">
-          <span style={{ color: 'var(--warning)' }}>✎ Vorbereitungsmodus – Spieler-Sync gesperrt</span>
+          <span style={{ color: 'var(--warning)' }}>{t('statusBar.prepMode')}</span>
         </div>
       )}
 
-      {/* Blackout indicator */}
       {blackoutActive && (
         <div className="statusbar-item">
-          <span style={{ color: 'var(--warning)' }}>⬛ Schwarzbild</span>
+          <span style={{ color: 'var(--warning)' }}>{t('statusBar.blackout')}</span>
         </div>
       )}
 
-      {/* Current initiative fighter */}
       {current && (
         <div className="statusbar-item">
           <span style={{ color: 'var(--accent-light)' }}>
-            ⚔️ Runde {round} · {current.combatantName}
+            {t('statusBar.round', { round, name: current.combatantName })}
           </span>
         </div>
       )}
 
-      {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Export / Import */}
       {activeCampaignId && (
         <>
           <button
             className="btn btn-ghost"
             style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', height: 20 }}
             onClick={handleImport}
-            title="Kampagne importieren (ZIP)"
+            title={t('statusBar.importTooltip')}
           >
-            ↓ Import
+            {t('statusBar.import')}
           </button>
           <button
             className="btn btn-ghost"
             style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', height: 20 }}
             onClick={handleExport}
-            title="Kampagne exportieren (ZIP)"
+            title={t('statusBar.exportTooltip')}
           >
-            ↑ Export
+            {t('statusBar.export')}
           </button>
           <button
             className="btn btn-ghost"
             style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', height: 20, color: 'var(--accent-light)' }}
             onClick={handleQuickBackup}
-            title="Schnell-Backup → ~/Documents/BoltBerry-Backups/"
+            title={t('statusBar.backupTooltip')}
           >
-            ⬡ Backup
+            {t('statusBar.backup')}
           </button>
         </>
       )}
 
-      {/* Save state */}
       <div className="statusbar-item" style={{ color: saveLabel.color }}>
         {saveLabel.text}
       </div>
 
       <div className="statusbar-item" style={{ color: 'var(--text-muted)', borderLeft: '1px solid var(--border-subtle)', paddingLeft: 'var(--sp-4)' }}>
-        BoltBerry v0.1.0
+        {t('app.version', { version: '0.1.0' })}
       </div>
     </div>
   )

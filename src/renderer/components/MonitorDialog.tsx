@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface Display {
   id: number
@@ -12,6 +13,7 @@ interface MonitorDialogProps {
 }
 
 export function MonitorDialog({ onClose }: MonitorDialogProps) {
+  const { t } = useTranslation()
   const [displays, setDisplays] = useState<Display[]>([])
   const [selected, setSelected] = useState<number | null>(null)
   const [opening, setOpening] = useState(false)
@@ -51,13 +53,13 @@ export function MonitorDialog({ onClose }: MonitorDialogProps) {
         boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
       }}>
         <h2 style={{ fontSize: 'var(--text-md)', fontWeight: 600, marginBottom: 'var(--sp-4)' }}>
-          🖥 Spieler-Monitor auswählen
+          {t('monitorDialog.title')}
         </h2>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)', marginBottom: 'var(--sp-5)' }}>
           {displays.length === 0 ? (
             <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              Monitore werden geladen…
+              {t('monitorDialog.loading')}
             </div>
           ) : (
             displays.map((d) => (
@@ -89,12 +91,12 @@ export function MonitorDialog({ onClose }: MonitorDialogProps) {
                   🖥
                 </div>
                 <div>
-                  <div style={{ fontWeight: 500, fontSize: 'var(--text-sm)' }}>
-                    {d.label}
-                  </div>
+                  <div style={{ fontWeight: 500, fontSize: 'var(--text-sm)' }}>{d.label}</div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                     {d.bounds.width} × {d.bounds.height} px
-                    {d.isPrimary ? ' · Primär (DM-Monitor)' : ' · Empfohlen für Spieler'}
+                    {d.isPrimary
+                      ? ` ${t('monitorDialog.primary')}`
+                      : ` ${t('monitorDialog.recommended')}`}
                   </div>
                 </div>
                 {selected === d.id && (
@@ -106,13 +108,15 @@ export function MonitorDialog({ onClose }: MonitorDialogProps) {
         </div>
 
         <div style={{ display: 'flex', gap: 'var(--sp-2)', justifyContent: 'flex-end' }}>
-          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+          <button className="btn btn-ghost" onClick={onClose}>
+            {t('monitorDialog.cancel')}
+          </button>
           <button
             className="btn btn-primary"
             onClick={handleOpen}
             disabled={selected === null || opening}
           >
-            {opening ? 'Öffne…' : '🖥 Fenster öffnen'}
+            {opening ? t('monitorDialog.opening') : t('monitorDialog.open')}
           </button>
         </div>
       </div>

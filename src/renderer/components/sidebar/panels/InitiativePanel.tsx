@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useInitiativeStore } from '../../../stores/initiativeStore'
 import { useCampaignStore } from '../../../stores/campaignStore'
 import { useUIStore } from '../../../stores/uiStore'
@@ -12,6 +13,7 @@ function broadcastInitiative() {
 }
 
 export function InitiativePanel() {
+  const { t } = useTranslation()
   const { entries, round, addEntry, removeEntry, nextTurn, resetCombat } = useInitiativeStore()
   const { activeMapId } = useCampaignStore()
   const [name, setName] = useState('')
@@ -54,7 +56,7 @@ export function InitiativePanel() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="sidebar-section">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-2)' }}>
-          <div className="sidebar-section-title">Initiative – Runde {round}</div>
+          <div className="sidebar-section-title">{t('initiative.title', { round })}</div>
           <div style={{ display: 'flex', gap: 'var(--sp-1)' }}>
             <button
               className="btn btn-ghost"
@@ -79,14 +81,14 @@ export function InitiativePanel() {
         <div style={{ display: 'flex', gap: 'var(--sp-1)', marginBottom: 'var(--sp-2)' }}>
           <input
             className="input"
-            placeholder="Name"
+            placeholder={t('initiative.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           />
           <input
             className="input"
-            placeholder="Init"
+            placeholder={t('initiative.rollPlaceholder')}
             type="number"
             value={roll}
             onChange={(e) => setRoll(e.target.value)}
@@ -102,7 +104,7 @@ export function InitiativePanel() {
         {entries.length === 0 ? (
           <div className="empty-state" style={{ padding: 'var(--sp-6)' }}>
             <div className="empty-state-icon" style={{ fontSize: 32 }}>⚔️</div>
-            <div className="empty-state-title" style={{ fontSize: 'var(--text-sm)' }}>Kein Kampf aktiv</div>
+            <div className="empty-state-title" style={{ fontSize: 'var(--text-sm)' }}>{t('initiative.noCombat')}</div>
           </div>
         ) : (
           entries.map((entry) => (
@@ -140,8 +142,8 @@ export function InitiativePanel() {
               <button
                 className="btn btn-ghost btn-icon"
                 style={{ fontSize: 10, padding: 2 }}
-                title="Aus Initiative entfernen"
-                aria-label="Aus Initiative entfernen"
+                title={t('initiative.removeEntry') ?? '✕'}
+                aria-label={t('initiative.removeEntry') ?? '✕'}
                 onClick={() => {
                   window.electronAPI?.dbRun('DELETE FROM initiative WHERE id = ?', [entry.id])
                   removeEntry(entry.id)

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useMapTransformStore } from '../../stores/mapTransformStore'
 import { AssetBrowser } from './panels/AssetBrowser'
 import type { MapRecord } from '@shared/ipc-types'
 
 export function LeftSidebar() {
+  const { t } = useTranslation()
   const {
     activeCampaignId,
     activeMaps,
@@ -165,7 +167,7 @@ export function LeftSidebar() {
     <div className="sidebar sidebar-left">
       {/* ── Tab bar ──────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', flexShrink: 0 }}>
-        {([['maps', '🗺️', 'Karten'], ['assets', '🗄', 'Assets']] as const).map(([id, icon, label]) => (
+        {([['maps', '🗺️', t('sidebar.left.tabMaps')], ['assets', '🗄', t('sidebar.left.tabAssets')]] as const).map(([id, icon, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -188,11 +190,11 @@ export function LeftSidebar() {
       {tab === 'maps' && <>
       {/* ── Map list ──────────────────────────────────────────────────────── */}
       <div className="sidebar-section">
-        <div className="sidebar-section-title">Karten</div>
+        <div className="sidebar-section-title">{t('sidebar.left.mapsTitle')}</div>
 
         {activeMaps.length === 0 && !addingMap && (
           <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', padding: 'var(--sp-2) 0' }}>
-            Noch keine Karten
+            {t('sidebar.left.mapsEmpty')}
           </div>
         )}
 
@@ -223,7 +225,7 @@ export function LeftSidebar() {
             <input
               className="input"
               autoFocus
-              placeholder="Kartenname..."
+              placeholder={t('sidebar.left.mapNamePlaceholder')}
               value={mapName}
               onChange={(e) => setMapName(e.target.value)}
               style={{ marginBottom: 'var(--sp-2)' }}
@@ -237,14 +239,14 @@ export function LeftSidebar() {
                 style={{ flex: 1, justifyContent: 'center', fontSize: 'var(--text-xs)' }}
                 onClick={handleAddMap}
               >
-                🖼 Bild wählen
+                {t('sidebar.left.chooseImage')}
               </button>
               <button
                 className="btn btn-ghost"
                 style={{ flex: 1, justifyContent: 'center', fontSize: 'var(--text-xs)' }}
                 onClick={handleAddMapFromPdf}
               >
-                📄 PDF
+                {t('sidebar.left.choosePdf')}
               </button>
               <button className="btn btn-ghost" onClick={() => { setAddingMap(false); setMapName('') }}>✕</button>
             </div>
@@ -255,7 +257,7 @@ export function LeftSidebar() {
             style={{ width: '100%', justifyContent: 'center', marginTop: 'var(--sp-2)', fontSize: 'var(--text-xs)' }}
             onClick={() => setAddingMap(true)}
           >
-            + Karte hinzufügen
+            {t('sidebar.left.addMap')}
           </button>
         )}
       </div>
@@ -263,7 +265,7 @@ export function LeftSidebar() {
       {/* ── Grid settings (only when a map is active) ─────────────────────── */}
       {activeMap && (
         <div className="sidebar-section">
-          <div className="sidebar-section-title">Raster – {activeMap.name}</div>
+          <div className="sidebar-section-title">{t('sidebar.left.gridTitle', { name: activeMap.name })}</div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
             {/* Grid type */}
@@ -275,7 +277,7 @@ export function LeftSidebar() {
                   style={{ flex: 1, justifyContent: 'center', fontSize: 'var(--text-xs)', padding: '4px' }}
                   onClick={() => handleGridChange(type, gridSize)}
                 >
-                  {type === 'none' ? '✕ Aus' : type === 'square' ? '⬛' : '⬡'}
+                  {type === 'none' ? t('sidebar.left.gridOff') : type === 'square' ? '⬛' : '⬡'}
                 </button>
               ))}
             </div>

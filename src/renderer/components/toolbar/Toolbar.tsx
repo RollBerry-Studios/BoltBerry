@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useUIStore, type ActiveTool } from '../../stores/uiStore'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useMapTransformStore } from '../../stores/mapTransformStore'
@@ -6,37 +7,18 @@ import { MonitorDialog } from '../MonitorDialog'
 import clsx from 'clsx'
 import logoSquare from '../../assets/boltberry-logo.png'
 
-// ─── Tool definitions ──────────────────────────────────────────────────────────
-
-const PRIMARY_TOOLS: { id: ActiveTool; icon: string; label: string; shortcut: string }[] = [
-  { id: 'select',  icon: '↖',  label: 'Auswählen / Verschieben', shortcut: 'V' },
-  { id: 'pointer', icon: '👆', label: 'Zeiger / Ping',            shortcut: 'W' },
-  { id: 'token',   icon: '⬤',  label: 'Token platzieren',         shortcut: 'T' },
-]
-
-const FOG_TOOLS: { id: ActiveTool; icon: string; label: string; shortcut: string }[] = [
-  { id: 'fog-rect',    icon: '▭', label: 'Fog aufdecken (Rechteck)', shortcut: 'F' },
-  { id: 'fog-polygon', icon: '⬡', label: 'Fog aufdecken (Polygon)',  shortcut: 'P' },
-  { id: 'fog-cover',   icon: '▮', label: 'Fog zudecken',             shortcut: 'C' },
-]
-
-const MEASURE_TOOLS: { id: ActiveTool; icon: string; label: string; shortcut: string }[] = [
-  { id: 'measure-line',   icon: '📏', label: 'Distanz messen',       shortcut: 'M' },
-  { id: 'measure-circle', icon: '◎',  label: 'Radius / AoE (Kreis)', shortcut: '' },
-  { id: 'measure-cone',   icon: '◿',  label: 'Kegel (60°)',          shortcut: '' },
-]
-
-// ─── Dropdown group component ──────────────────────────────────────────────────
+// ─── Tool group dropdown ───────────────────────────────────────────────────────
 
 interface ToolGroupProps {
-  tools: { id: ActiveTool; icon: string; label: string; shortcut: string }[]
+  tools: { id: ActiveTool; icon: string; labelKey: string; shortcut: string }[]
   activeTool: ActiveTool
   groupIcon: string
-  groupLabel: string
+  groupLabelKey: string
   onSelect: (id: ActiveTool) => void
 }
 
-function ToolGroup({ tools, activeTool, groupIcon, groupLabel, onSelect }: ToolGroupProps) {
+function ToolGroup({ tools, activeTool, groupIcon, groupLabelKey, onSelect }: ToolGroupProps) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
 
@@ -44,7 +26,6 @@ function ToolGroup({ tools, activeTool, groupIcon, groupLabel, onSelect }: ToolG
   const displayIcon = activeInGroup?.icon ?? groupIcon
   const isGroupActive = !!activeInGroup
 
-  // Close dropdown on outside click
   useEffect(() => {
     if (!open) return
     function handleOutside(e: MouseEvent) {
@@ -60,7 +41,7 @@ function ToolGroup({ tools, activeTool, groupIcon, groupLabel, onSelect }: ToolG
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <button
         className={clsx('tool-btn', isGroupActive && 'active')}
-        title={groupLabel}
+        title={t(groupLabelKey)}
         onClick={() => setOpen((v) => !v)}
       >
         {displayIcon}
@@ -77,7 +58,7 @@ function ToolGroup({ tools, activeTool, groupIcon, groupLabel, onSelect }: ToolG
           border: '1px solid var(--border)',
           borderRadius: 'var(--radius)',
           padding: '4px 0',
-          minWidth: 180,
+          minWidth: 200,
           boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
           zIndex: 9999,
         }}>
@@ -103,7 +84,7 @@ function ToolGroup({ tools, activeTool, groupIcon, groupLabel, onSelect }: ToolG
               onMouseLeave={(e) => { if (activeTool !== tool.id) e.currentTarget.style.background = 'none' }}
             >
               <span style={{ fontSize: 16, minWidth: 20, textAlign: 'center' }}>{tool.icon}</span>
-              <span style={{ flex: 1 }}>{tool.label}</span>
+              <span style={{ flex: 1 }}>{t(tool.labelKey)}</span>
               {tool.shortcut && (
                 <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-overlay)', padding: '1px 4px', borderRadius: 3 }}>
                   {tool.shortcut}
@@ -119,8 +100,34 @@ function ToolGroup({ tools, activeTool, groupIcon, groupLabel, onSelect }: ToolG
 
 // ─── Main Toolbar ──────────────────────────────────────────────────────────────
 
+const PRIMARY_TOOLS: { id: ActiveTool; icon: string; labelKey: string; shortcut: string }[] = [
+  { id: 'select',  icon: '↖',  labelKey: 'toolbar.tools.select',  shortcut: 'V' },
+  { id: 'pointer', icon: '👆', labelKey: 'toolbar.tools.pointer', shortcut: 'W' },
+  { id: 'token',   icon: '⬤',  labelKey: 'toolbar.tools.token',   shortcut: 'T' },
+]
+
+const FOG_TOOLS: { id: ActiveTool; icon: string; labelKey: string; shortcut: string }[] = [
+  { id: 'fog-rect',    icon: '▭', labelKey: 'toolbar.tools.fogRect',    shortcut: 'F' },
+  { id: 'fog-polygon', icon: '⬡', labelKey: 'toolbar.tools.fogPolygon', shortcut: 'P' },
+  { id: 'fog-cover',   icon: '▮', labelKey: 'toolbar.tools.fogCover',   shortcut: 'C' },
+]
+
+const MEASURE_TOOLS: { id: ActiveTool; icon: string; labelKey: string; shortcut: string }[] = [
+  { id: 'measure-line',   icon: '📏', labelKey: 'toolbar.tools.measureLine',   shortcut: 'M' },
+  { id: 'measure-circle', icon: '◎',  labelKey: 'toolbar.tools.measureCircle', shortcut: '' },
+  { id: 'measure-cone',   icon: '◿',  labelKey: 'toolbar.tools.measureCone',   shortcut: '' },
+]
+
 export function Toolbar() {
-  const { activeTool, setActiveTool, toggleBlackout, blackoutActive, toggleTheme, theme, toggleLeftSidebar, toggleRightSidebar, sessionMode, setSessionMode } = useUIStore()
+  const { t } = useTranslation()
+  const {
+    activeTool, setActiveTool,
+    toggleBlackout, blackoutActive,
+    toggleTheme, theme,
+    toggleLeftSidebar, toggleRightSidebar,
+    sessionMode, setSessionMode,
+    toggleLanguage, language,
+  } = useUIStore()
   const { activeCampaignId } = useCampaignStore()
   const [showMonitorDialog, setShowMonitorDialog] = useState(false)
   const [cameraSent, setCameraSent] = useState(false)
@@ -155,17 +162,15 @@ export function Toolbar() {
 
   return (
     <div className="toolbar">
-      {/* Left: sidebar toggle */}
-      <button className="tool-btn" title="Linke Sidebar" onClick={toggleLeftSidebar}>◧</button>
+      <button className="tool-btn" title={t('toolbar.leftSidebar')} onClick={toggleLeftSidebar}>◧</button>
 
       <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
-      {/* Primary tools */}
       {PRIMARY_TOOLS.map((tool) => (
         <button
           key={tool.id}
           className={clsx('tool-btn', activeTool === tool.id && 'active')}
-          title={`${tool.label} [${tool.shortcut}]`}
+          title={`${t(tool.labelKey)} [${tool.shortcut}]`}
           onClick={() => handleToolClick(tool.id)}
         >
           {tool.icon}
@@ -174,28 +179,25 @@ export function Toolbar() {
 
       <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
-      {/* Fog tools group */}
       <ToolGroup
         tools={FOG_TOOLS}
         activeTool={activeTool}
         groupIcon="▭"
-        groupLabel="Nebel-Werkzeuge"
+        groupLabelKey="toolbar.tools.fogGroup"
         onSelect={handleToolClick}
       />
 
-      {/* Measure tools group */}
       <ToolGroup
         tools={MEASURE_TOOLS}
         activeTool={activeTool}
         groupIcon="📏"
-        groupLabel="Mess-Werkzeuge"
+        groupLabelKey="toolbar.tools.measureGroup"
         onSelect={handleToolClick}
       />
 
-      {/* Atmosphere */}
       <button
         className="tool-btn"
-        title="Atmosphäre-Bild [A]"
+        title={t('toolbar.tools.atmosphere')}
         onClick={handleAtmosphere}
       >
         🖼
@@ -203,12 +205,9 @@ export function Toolbar() {
 
       <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
-      {/* Session / Prep mode toggle */}
       <button
         className={clsx('tool-btn', sessionMode === 'prep' && 'active')}
-        title={sessionMode === 'session'
-          ? 'Sitzungsmodus: Spieler sieht Änderungen live. Klicken für Vorbereitungsmodus.'
-          : 'Vorbereitungsmodus: Spieler-Sync gesperrt. Klicken für Sitzungsmodus.'}
+        title={sessionMode === 'session' ? t('toolbar.sessionModeHint') : t('toolbar.prepModeHint')}
         onClick={() => setSessionMode(sessionMode === 'session' ? 'prep' : 'session')}
         style={sessionMode === 'prep' ? { color: 'var(--warning)' } : undefined}
       >
@@ -217,33 +216,28 @@ export function Toolbar() {
 
       <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
-      {/* Blackout */}
       <button
         className={clsx('tool-btn', blackoutActive && 'active')}
-        title="Schwarzbild [Space]"
+        title={t('toolbar.blackout')}
         onClick={toggleBlackout}
         style={blackoutActive ? { color: 'var(--warning)' } : undefined}
       >
         ⬛
       </button>
 
-      {/* Camera share */}
       <button
         className={clsx('tool-btn', cameraSent && 'active')}
-        title="Ansicht an Spieler senden"
+        title={t('toolbar.shareCamera')}
         onClick={handleShareCamera}
         style={cameraSent ? { color: 'var(--success)' } : undefined}
       >
         📺
       </button>
 
-      {/* Player window */}
-      <button className="tool-btn" title="Spieler-Fenster öffnen" onClick={() => setShowMonitorDialog(true)}>🖥</button>
+      <button className="tool-btn" title={t('toolbar.openPlayerWindow')} onClick={() => setShowMonitorDialog(true)}>🖥</button>
 
-      {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Right side */}
       {activeCampaignId && (
         <img
           src={logoSquare}
@@ -259,21 +253,31 @@ export function Toolbar() {
 
       <button
         className="tool-btn"
-        title="Tastenkürzel [?]"
+        title={t('toolbar.shortcuts')}
         onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }))}
       >
         ?
       </button>
 
+      {/* Language toggle */}
       <button
         className="tool-btn"
-        title={`Theme: ${theme === 'dark' ? 'Hell' : 'Dunkel'}`}
+        title={t('toolbar.switchLanguage')}
+        onClick={toggleLanguage}
+        style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.02em' }}
+      >
+        {language === 'de' ? 'EN' : 'DE'}
+      </button>
+
+      <button
+        className="tool-btn"
+        title={theme === 'dark' ? t('toolbar.themeDark') : t('toolbar.themeLight')}
         onClick={toggleTheme}
       >
         {theme === 'dark' ? '☀' : '🌙'}
       </button>
 
-      <button className="tool-btn" title="Rechte Sidebar" onClick={toggleRightSidebar}>◨</button>
+      <button className="tool-btn" title={t('toolbar.rightSidebar')} onClick={toggleRightSidebar}>◨</button>
 
       {showMonitorDialog && (
         <MonitorDialog onClose={() => setShowMonitorDialog(false)} />

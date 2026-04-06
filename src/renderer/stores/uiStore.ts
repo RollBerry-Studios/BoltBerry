@@ -1,9 +1,11 @@
 import { create } from 'zustand'
+import i18n from '../i18n'
 
 export type ActiveTool = 'select' | 'fog-rect' | 'fog-polygon' | 'fog-cover' | 'token' | 'atmosphere' | 'pointer' | 'measure-line' | 'measure-circle' | 'measure-cone'
 export type SidebarTab = 'tokens' | 'initiative' | 'notes' | 'handouts' | 'overlay' | 'audio' | 'dice'
 export type AppMode = 'map' | 'atmosphere' | 'blackout'
 export type SessionMode = 'session' | 'prep'
+export type AppLanguage = 'de' | 'en'
 
 interface UIState {
   activeTool: ActiveTool
@@ -15,6 +17,7 @@ interface UIState {
   appMode: AppMode
   sessionMode: SessionMode
   theme: 'dark' | 'light'
+  language: AppLanguage
   atmosphereImagePath: string | null
   selectedTokenId: number | null
 
@@ -28,6 +31,7 @@ interface UIState {
   setAppMode: (mode: AppMode) => void
   setSessionMode: (mode: SessionMode) => void
   toggleTheme: () => void
+  toggleLanguage: () => void
   setAtmosphereImage: (path: string | null) => void
   setSelectedToken: (id: number | null) => void
 }
@@ -42,6 +46,7 @@ export const useUIStore = create<UIState>((set) => ({
   appMode: 'map',
   sessionMode: 'session',
   theme: 'dark',
+  language: (localStorage.getItem('boltberry-lang') as AppLanguage | null) ?? 'de',
   atmosphereImagePath: null,
   selectedTokenId: null,
 
@@ -63,6 +68,13 @@ export const useUIStore = create<UIState>((set) => ({
       const theme = s.theme === 'dark' ? 'light' : 'dark'
       document.documentElement.setAttribute('data-theme', theme)
       return { theme }
+    }),
+  toggleLanguage: () =>
+    set((s) => {
+      const language: AppLanguage = s.language === 'de' ? 'en' : 'de'
+      i18n.changeLanguage(language)
+      localStorage.setItem('boltberry-lang', language)
+      return { language }
     }),
   setAtmosphereImage: (atmosphereImagePath) =>
     set({ atmosphereImagePath, appMode: atmosphereImagePath ? 'atmosphere' : 'map' }),

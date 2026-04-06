@@ -1,34 +1,42 @@
+import { useTranslation } from 'react-i18next'
+
 interface ShortcutOverlayProps {
   onClose: () => void
 }
 
-const SHORTCUTS = [
-  { section: 'Werkzeuge' },
-  { key: 'V',         label: 'Auswählen / Token verschieben' },
-  { key: 'F',         label: 'Fog aufdecken (Rechteck)' },
-  { key: 'P',         label: 'Fog aufdecken (Polygon)' },
-  { key: 'C',         label: 'Fog zudecken' },
-  { key: 'T',         label: 'Token-Tab öffnen' },
-  { section: 'Karte & Navigation' },
-  { key: 'Mausrad',   label: 'Zoom zur Mausposition' },
-  { key: 'Alt + Drag',label: 'Karte verschieben (Pan)' },
-  { key: 'Mittelklick + Drag', label: 'Karte verschieben (Pan)' },
-  { key: '1 – 5',     label: 'Schnell-Wechsel Karte 1–5' },
-  { section: 'Kampf & Initiative' },
-  { key: 'N',         label: 'Nächster Kämpfer' },
-  { section: 'Fog of War' },
-  { key: 'Doppelklick', label: 'Polygon abschließen' },
-  { key: 'Ctrl + Z',  label: 'Fog-Aufdeckung rückgängig' },
-  { key: 'Ctrl + ⇧ + Z', label: 'Fog-Aufdeckung wiederholen' },
-  { section: 'Allgemein' },
-  { key: 'Space',     label: 'Schwarzbild ein/aus' },
-  { key: 'Delete',    label: 'Ausgewählten Token löschen' },
-  { key: 'Escape',    label: 'Auswahl aufheben / Polygon abbrechen' },
-  { key: 'Ctrl + S',  label: 'Sofort speichern' },
-  { key: '?',         label: 'Dieses Fenster' },
-] as const
-
 export function ShortcutOverlay({ onClose }: ShortcutOverlayProps) {
+  const { t } = useTranslation()
+
+  type ShortcutEntry =
+    | { section: string }
+    | { key: string; labelKey: string }
+
+  const SHORTCUTS: ShortcutEntry[] = [
+    { section: t('shortcuts.sectionTools') },
+    { key: 'V',                   labelKey: 'shortcuts.keySelect' },
+    { key: 'F',                   labelKey: 'shortcuts.keyFogRect' },
+    { key: 'P',                   labelKey: 'shortcuts.keyFogPolygon' },
+    { key: 'C',                   labelKey: 'shortcuts.keyFogCover' },
+    { key: 'T',                   labelKey: 'shortcuts.keyTokenTab' },
+    { section: t('shortcuts.sectionMapNav') },
+    { key: 'Mausrad / Scroll',    labelKey: 'shortcuts.keyMouseWheel' },
+    { key: 'Alt + Drag',          labelKey: 'shortcuts.keyAltDrag' },
+    { key: 'Mittelklick / Middle',labelKey: 'shortcuts.keyMiddleDrag' },
+    { key: '1 – 5',               labelKey: 'shortcuts.keyMapSwitch' },
+    { section: t('shortcuts.sectionCombat') },
+    { key: 'N',                   labelKey: 'shortcuts.keyNextFighter' },
+    { section: t('shortcuts.sectionFog') },
+    { key: 'Doppelklick / Dblclk',labelKey: 'shortcuts.keyPolygonFinish' },
+    { key: 'Ctrl + Z',            labelKey: 'shortcuts.keyFogUndo' },
+    { key: 'Ctrl + ⇧ + Z',       labelKey: 'shortcuts.keyFogRedo' },
+    { section: t('shortcuts.sectionGeneral') },
+    { key: 'Space',               labelKey: 'shortcuts.keyBlackout' },
+    { key: 'Delete',              labelKey: 'shortcuts.keyDeleteToken' },
+    { key: 'Escape',              labelKey: 'shortcuts.keyEscape' },
+    { key: 'Ctrl + S',            labelKey: 'shortcuts.keySave' },
+    { key: '?',                   labelKey: 'shortcuts.keyShortcutOverlay' },
+  ]
+
   return (
     <div
       style={{
@@ -50,7 +58,7 @@ export function ShortcutOverlay({ onClose }: ShortcutOverlayProps) {
         boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-5)' }}>
-          <h2 style={{ fontSize: 'var(--text-md)', fontWeight: 600 }}>⌨️ Tastenkürzel</h2>
+          <h2 style={{ fontSize: 'var(--text-md)', fontWeight: 600 }}>{t('shortcuts.title')}</h2>
           <button className="btn btn-ghost btn-icon" onClick={onClose}>✕</button>
         </div>
 
@@ -81,7 +89,7 @@ export function ShortcutOverlay({ onClose }: ShortcutOverlayProps) {
               gap: 'var(--sp-4)',
             }}>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-                {s.label}
+                {t(s.labelKey)}
               </span>
               <kbd style={{
                 background: 'var(--bg-overlay)',
@@ -108,7 +116,7 @@ export function ShortcutOverlay({ onClose }: ShortcutOverlayProps) {
           color: 'var(--text-muted)',
           textAlign: 'center',
         }}>
-          Drücke <kbd style={{ background: 'var(--bg-overlay)', padding: '1px 6px', borderRadius: 3, border: '1px solid var(--border)' }}>?</kbd> oder <kbd style={{ background: 'var(--bg-overlay)', padding: '1px 6px', borderRadius: 3, border: '1px solid var(--border)' }}>F1</kbd> um dieses Fenster zu öffnen
+          {t('shortcuts.hint', { key1: '?', key2: 'F1' })}
         </div>
       </div>
     </div>

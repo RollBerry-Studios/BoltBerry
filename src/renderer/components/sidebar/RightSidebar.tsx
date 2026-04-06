@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useUIStore, type SidebarTab } from '../../stores/uiStore'
 import { TokenPanel } from './panels/TokenPanel'
 import { InitiativePanel } from './panels/InitiativePanel'
@@ -7,22 +8,22 @@ import { HandoutsPanel } from './panels/HandoutsPanel'
 import { OverlayPanel } from './panels/OverlayPanel'
 import { DiceRoller } from './panels/DiceRoller'
 
-const TABS: { id: SidebarTab; label: string; icon: string }[] = [
-  { id: 'tokens',     label: 'Token',      icon: '⬤' },
-  { id: 'initiative', label: 'Initiative', icon: '⚔️' },
-  { id: 'notes',      label: 'Notizen',   icon: '📝' },
-  { id: 'handouts',   label: 'Handouts',  icon: '📜' },
-  { id: 'overlay',    label: 'Overlay',   icon: '✦' },
-  { id: 'audio',      label: 'Audio',     icon: '🎵' },
-  { id: 'dice',       label: 'Würfel',    icon: '🎲' },
-]
-
 export function RightSidebar() {
+  const { t } = useTranslation()
   const { sidebarTab, setSidebarTab } = useUIStore()
+
+  const TABS: { id: SidebarTab; labelKey: string; icon: string }[] = [
+    { id: 'tokens',     labelKey: 'sidebar.right.tabTokens',     icon: '⬤' },
+    { id: 'initiative', labelKey: 'sidebar.right.tabInitiative', icon: '⚔️' },
+    { id: 'notes',      labelKey: 'sidebar.right.tabNotes',      icon: '📝' },
+    { id: 'handouts',   labelKey: 'sidebar.right.tabHandouts',   icon: '📜' },
+    { id: 'overlay',    labelKey: 'sidebar.right.tabOverlay',    icon: '✦' },
+    { id: 'audio',      labelKey: 'sidebar.right.tabAudio',      icon: '🎵' },
+    { id: 'dice',       labelKey: 'sidebar.right.tabDice',       icon: '🎲' },
+  ]
 
   return (
     <div className="sidebar sidebar-right">
-      {/* Tab bar */}
       <div style={{
         display: 'flex',
         borderBottom: '1px solid var(--border)',
@@ -32,8 +33,8 @@ export function RightSidebar() {
         {TABS.map((tab) => (
           <button
             key={tab.id}
-            title={tab.label}
-            aria-label={tab.label}
+            title={t(tab.labelKey)}
+            aria-label={t(tab.labelKey)}
             onClick={() => setSidebarTab(tab.id)}
             style={{
               flex: 1,
@@ -59,7 +60,6 @@ export function RightSidebar() {
         ))}
       </div>
 
-      {/* Panel content */}
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {sidebarTab === 'tokens'     && <TokenPanel />}
         {sidebarTab === 'initiative' && <InitiativePanel />}

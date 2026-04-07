@@ -14,10 +14,10 @@ permissions:
   contents: write
 
 jobs:
-  # ─── Windows Build (self-hosted Proxmox runner preferred) ─────────────────
+  # ─── Windows Build ────────────────────────────────────────────────────────
   build-windows:
     name: Build · Windows
-    runs-on: [self-hosted, Windows, X64]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -46,10 +46,10 @@ jobs:
           path: release/*.exe
           retention-days: 7
 
-  # ─── Linux Build (self-hosted Proxmox runner preferred) ───────────────────
+  # ─── Linux Build ──────────────────────────────────────────────────────────
   build-linux:
     name: Build · Linux
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -58,6 +58,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm fakeroot dpkg
 
       - name: Install dependencies
         run: npm ci
@@ -77,10 +82,10 @@ jobs:
             release/*.deb
           retention-days: 7
 
-  # ─── macOS Build (GitHub-hosted, macOS VMs auf Proxmox lizenzrechtlich eingeschränkt) ──
+  # ─── macOS Build ──────────────────────────────────────────────────────────
   build-macos:
     name: Build · macOS
-    runs-on: [self-hosted, macOS, ARM64, apple-silicon]
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -116,7 +121,7 @@ jobs:
   publish-release:
     name: Publish Release
     needs: [build-windows, build-linux, build-macos]
-    runs-on: [self-hosted, Linux, X64]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 

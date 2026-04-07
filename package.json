@@ -1,10 +1,13 @@
 {
   "name": "boltberry",
   "version": "0.1.0",
-  "description": "BoltBerry – Lokale Virtual-Tabletop-App für Pen-and-Paper-Runden",
+  "description": "BoltBerry \u2013 Lokale Virtual-Tabletop-App f\u00fcr Pen-and-Paper-Runden",
   "main": "dist/main/main/index.js",
   "homepage": ".",
-  "author": "BoltBerry Dev",
+  "author": {
+    "name": "RollBerry Studios",
+    "email": "rollberry@proton.me"
+  },
   "license": "MIT",
   "scripts": {
     "dev": "concurrently -n main,preload,renderer,electron \"npm run dev:main\" \"npm run dev:preload\" \"npm run dev:renderer\" \"npm run dev:electron\"",

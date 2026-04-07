@@ -29,50 +29,27 @@ export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
   // Resolve image path when map changes
   useEffect(() => {
     async function resolvePath() {
+      console.log('[MapLayer] Resolving path for map:', map.id, 'with imagePath:', map.imagePath)
+      
       if (!window.electronAPI) {
-        // Try direct file path for development
-        setResolvedImagePath(`file://${map.imagePath}`)
+        // Development fallback - pass relative path to main process
+        setResolvedImagePath(map.imagePath)
         return
       }
       
       try {
-        // Use main process to get image as base64 to avoid file:// access issues
-        const imageData = await window.electronAPI.getImageAsBase64(map.imagePath)
-        if (imageData) {
-          setResolvedImagePath(imageData)
-        } else {
-          // Fallback to file URL if base64 fails
-          const userDataPath = await window.electronAPI.getUserDataPath()
-          const absolutePath = `${userDataPath}/${map.imagePath}`
-          setResolvedImagePath(`file://${absolutePath}`)
-        }
+        // In production, pass relative path directly to main process for base64 conversion
+        // This avoids file:// URL issues entirely
+        setResolvedImagePath(map.imagePath)
       } catch (err) {
         console.error('[MapLayer] Failed to resolve image path:', err)
-        // Ultimate fallback
-        setResolvedImagePath(`file://${map.imagePath}`)
+        // Fallback to direct path
+        setResolvedImagePath(map.imagePath)
       }
     }
     
     resolvePath()
-  }, [map.imagePath])
-
-  // Create image element from resolved image path (base64 or file URL)
-  useEffect(() => {
-    if (!resolvedImagePath) {
-      setImageElement(null)
-      return
-    }
-    
-    const img = new Image()
-    img.onload = () => {
-      setImageElement(img)
-    }
-    img.onerror = (err) => {
-      console.error('[MapLayer] Failed to load image element:', resolvedImagePath, err)
-      setImageElement(null)
-    }
-    img.src = resolvedImagePath
-  }, [resolvedImagePath])
+  }, [map.imagePath, map.id])
 
   // Clear pending camera-save timer on unmount to prevent stale writes
   useEffect(() => {
@@ -80,16 +57,6 @@ export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
       if (cameraSaveTimerRef.current) clearTimeout(cameraSaveTimerRef.current)
     }
   }, [])
-
-  // Debug logging for map visibility
-  useEffect(() => {
-    console.log('[MapLayer] Map render state:', {
-      hasImage: !!imageElement,
-      imagePath: map.imagePath,
-      natW, natH,
-      scale, offsetX, offsetY
-    })
-  }, [imageElement, map.imagePath, natW, natH, scale, offsetX, offsetY])
 
   // Fit map to canvas when image loads or canvas resizes
   useEffect(() => {
@@ -206,9 +173,9 @@ export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
       onMouseLeave={handleMouseUp}
       onWheel={handleWheel}
     >
-      {imageElement && (
+      {image && (
         <KonvaImage
-          image={imageElement}
+          image={image as HTMLImageElement}
           x={offsetX}
           y={offsetY}
           width={natW * scale}

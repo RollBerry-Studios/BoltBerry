@@ -17,8 +17,16 @@ export function SettingsPanel() {
   }
 
   async function handleRescanContent() {
-    // TODO: Implement rescan functionality
-    alert('Rescan-Funktion wird noch implementiert')
+    if (window.electronAPI) {
+      try {
+        // Show scanning message
+        const result = await window.electronAPI.rescanContentFolder()
+        alert(`Inhalte wurden erfolgreich neu gescannt:\n${result.message}`)
+      } catch (err) {
+        console.error('[SettingsPanel] Failed to rescan content folder:', err)
+        alert('Fehler beim Scannen des Inhaltsordners: ' + (err instanceof Error ? err.message : String(err)))
+      }
+    }
   }
 
   return (

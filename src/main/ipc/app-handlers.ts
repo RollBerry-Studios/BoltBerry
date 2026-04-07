@@ -85,14 +85,23 @@ export function registerAppHandlers(): void {
     const { promises: { readFile } } = require('fs')
     
     try {
+      console.log('[AppHandlers] GET_IMAGE_AS_BASE64 called with:', imagePath)
+      
+      // Remove file:// prefix if present
+      let cleanPath = imagePath
+      if (imagePath.startsWith('file://')) {
+        cleanPath = imagePath.substring(7) // Remove 'file://' prefix
+        console.log('[AppHandlers] Removed file:// prefix, clean path:', cleanPath)
+      }
+      
       let fullPath: string
-      if (isAbsolute(imagePath)) {
+      if (isAbsolute(cleanPath)) {
         // Already absolute path
-        fullPath = imagePath
+        fullPath = cleanPath
       } else {
         // Relative path from user data folder
         const userDataPath = getCustomUserDataPath() || app.getPath('userData')
-        fullPath = join(userDataPath, imagePath)
+        fullPath = join(userDataPath, cleanPath)
       }
       
       console.log('[AppHandlers] Reading image from:', fullPath)
@@ -106,6 +115,112 @@ export function registerAppHandlers(): void {
     } catch (err) {
       console.error('[AppHandlers] Failed to read image:', err)
       return null
+    }
+  })
+
+  // Rescan content folder to synchronize files with database
+  ipcMain.handle('RESCAN_CONTENT_FOLDER', async () => {
+    const { getCustomUserDataPath, getDb } = require('../db/database')
+    const { join, basename } = require('path')
+    const { readdir, stat } = require('fs').promises
+    
+    try {
+      const userDataPath = getCustomUserDataPath() || app.getPath('userData')
+      const assetsPath = join(userDataPath, 'assets', 'map')
+      
+      console.log('[AppHandlers] Rescanning content folder:', assetsPath)
+      
+      // Get all existing files in the assets/map directory
+      let files: string[] = []
+      try {
+        files = await readdir(assetsPath)
+      } catch (err) {
+        console.log('[AppHandlers] Assets folder does not exist, creating it')
+        return { scanned: 0, added: 0, removed: 0, message: 'Keine Dateien gefunden' }
+      }
+      
+      // Filter for image files
+      const imageFiles = files.filter(f => 
+        f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.jpeg') || f.endsWith('.webp')
+      )
+      
+      console.log('[AppHandlers] Found image files:', imageFiles)
+      
+      // Get database connection
+      const db = getDb()
+      
+      // Get all maps from database
+      const maps = db.prepare('SELECT id, image_path, name FROM maps').all() as { id: number; image_path: string; name: string }[]
+      console.log('[AppHandlers] Existing maps in database:', maps.length)
+      
+      // Create a map of existing files for quick lookup
+      const existingFiles = new Set(imageFiles.map(f => `assets/map/${f}`))
+      
+      // Remove database entries for files that no longer exist
+      let removedCount = 0
+      for (const map of maps) {
+        if (!existingFiles.has(map.image_path)) {
+          console.log('[AppHandlers] Removing map entry for missing file:', map.image_path)
+          db.prepare('DELETE FROM maps WHERE id = ?').run(map.id)
+          removedCount++
+        }
+      }
+      
+      // Get existing assets from database to avoid duplicates
+      const assets = db.prepare('SELECT stored_path FROM assets WHERE type = "map"').all() as { stored_path: string }[]
+      const existingAssets = new Set(assets.map(a => a.stored_path))
+      
+      // Add new files that aren't in the database yet
+      let addedCount = 0
+      for (const file of imageFiles) {
+        const filePath = `assets/map/${file}`
+        if (!existingAssets.has(filePath)) {
+          console.log('[AppHandlers] Adding new file to database:', filePath)
+          
+          // Extract name from filename (remove extension)
+          const fileName = file.replace(/\.[^/.]+$/, "") || file
+          
+          // Insert into assets table
+          const assetStmt = db.prepare(
+            'INSERT INTO assets (original_name, stored_path, type, campaign_id) VALUES (?, ?, ?, ?)'
+          )
+          const assetResult = assetStmt.run(fileName, filePath, 'map', null)
+          
+          // Insert into maps table with auto-generated name
+          const mapStmt = db.prepare(
+            'INSERT INTO maps (campaign_id, name, image_path, order_index, rotation) VALUES (?, ?, ?, ?, 0)'
+          )
+          // Use a default campaign ID (first campaign) or create one if none exists
+          let campaignId = db.prepare('SELECT id FROM campaigns LIMIT 1').get()?.id
+          if (!campaignId) {
+            // Create default campaign
+            const campaignStmt = db.prepare(
+              'INSERT INTO campaigns (name, created_at, last_opened) VALUES (?, datetime("now"), datetime("now"))'
+            )
+            const campaignResult = campaignStmt.run('Standard Kampagne')
+            campaignId = campaignResult.lastInsertRowid as number
+          }
+          mapStmt.run(campaignId, fileName, filePath, 0)
+          
+          addedCount++
+        }
+      }
+      
+      console.log('[AppHandlers] Rescan complete - Removed:', removedCount, 'Added:', addedCount)
+      return { 
+        scanned: imageFiles.length, 
+        added: addedCount, 
+        removed: removedCount,
+        message: `Scan abgeschlossen: ${imageFiles.length} Dateien, ${addedCount} hinzugefügt, ${removedCount} entfernt`
+      }
+    } catch (err) {
+      console.error('[AppHandlers] Failed to rescan content folder:', err)
+      return { 
+        scanned: 0, 
+        added: 0, 
+        removed: 0,
+        message: 'Fehler beim Scannen: ' + (err instanceof Error ? err.message : String(err))
+      }
     }
   })
 

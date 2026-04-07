@@ -79,9 +79,14 @@ export function LeftSidebar() {
       
       // Auto-name from file if no name was entered
       let finalMapName = mapName.trim()
-      if (!finalMapName) {
+      if (!finalMapName && asset.path) {
+        // Extract filename from path and remove extension
         const fileName = asset.path.split(/[\\/]/).pop() || ''
         finalMapName = fileName.replace(/\.[^/.]+$/, "") || 'Neue Karte'
+      }
+      // If still no name, use default
+      if (!finalMapName) {
+        finalMapName = 'Neue Karte'
       }
 
       const result = await window.electronAPI.dbRun(
@@ -241,9 +246,8 @@ export function LeftSidebar() {
         )}
 
         {activeMaps.map((map, i) => (
-          <button
+          <div
             key={map.id}
-            onClick={() => setActiveMap(map.id)}
             style={{
               display: 'flex', alignItems: 'center', gap: 'var(--sp-2)',
               width: '100%', padding: 'var(--sp-2)',
@@ -254,12 +258,60 @@ export function LeftSidebar() {
               cursor: 'pointer', textAlign: 'left', fontSize: 'var(--text-sm)',
               marginBottom: 'var(--sp-1)', transition: 'background var(--transition)',
             }}
+            onClick={() => setActiveMap(map.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              // Show context menu for map operations
+              if (window.electronAPI) {
+                const menu = [
+                  {
+                    label: 'Umbenennen',
+                    click: () => {
+                      const newName = prompt('Neuer Name:', map.name);
+                      if (newName && newName.trim() && window.electronAPI) {
+                        window.electronAPI.dbRun(
+                          'UPDATE maps SET name = ? WHERE id = ?',
+                          [newName.trim(), map.id]
+                        ).then(() => {
+                          // Refresh maps list
+                          useCampaignStore.getState().refreshCampaigns();
+                        });
+                      }
+                    }
+                  },
+                  {
+                    label: 'Löschen',
+                    click: () => {
+                      if (confirm(`Karte "${map.name}" wirklich löschen?`)) {
+                        if (window.electronAPI) {
+                          window.electronAPI.dbRun(
+                            'DELETE FROM maps WHERE id = ?',
+                            [map.id]
+                          ).then(() => {
+                            // Refresh maps list
+                            useCampaignStore.getState().refreshCampaigns();
+                          });
+                        }
+                      }
+                    }
+                  }
+                ];
+                
+                // Simple dropdown implementation
+                const action = prompt(`Was möchten Sie mit "${map.name}" tun?\n1. Umbenennen\n2. Löschen`, '1');
+                if (action === '1') {
+                  menu[0].click();
+                } else if (action === '2') {
+                  menu[1].click();
+                }
+              }
+            }}
           >
             <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', minWidth: 16 }}>{i + 1}</span>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
               {map.name}
             </span>
-          </button>
+          </div>
         ))}
 
         {addingMap ? (

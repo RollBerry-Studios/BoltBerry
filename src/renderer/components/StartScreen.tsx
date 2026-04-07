@@ -10,23 +10,34 @@ export function StartScreen() {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [duplicating, setDuplicating] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleCreate() {
-    if (!newName.trim() || !window.electronAPI) return
-    const result = await window.electronAPI.dbRun(
-      `INSERT INTO campaigns (name) VALUES (?)`,
-      [newName.trim()]
-    )
-    const campaign: Campaign = {
-      id: result.lastInsertRowid,
-      name: newName.trim(),
-      createdAt: new Date().toISOString(),
-      lastOpened: new Date().toISOString(),
+    if (!newName.trim()) return
+    if (!window.electronAPI) {
+      setError('Datenbankverbindung nicht verfügbar')
+      return
     }
-    addCampaign(campaign)
-    setActiveCampaign(campaign.id)
-    setCreating(false)
-    setNewName('')
+    setError(null)
+    try {
+      const result = await window.electronAPI.dbRun(
+        `INSERT INTO campaigns (name) VALUES (?)`,
+        [newName.trim()]
+      )
+      const campaign: Campaign = {
+        id: result.lastInsertRowid,
+        name: newName.trim(),
+        createdAt: new Date().toISOString(),
+        lastOpened: new Date().toISOString(),
+      }
+      addCampaign(campaign)
+      setActiveCampaign(campaign.id)
+      setCreating(false)
+      setNewName('')
+    } catch (err) {
+      console.error('[StartScreen] create failed:', err)
+      setError(`Kampagne konnte nicht erstellt werden: ${err}`)
+    }
   }
 
   async function handleDuplicate(campaignId: number) {
@@ -86,7 +97,7 @@ export function StartScreen() {
         background: 'var(--bg-surface)',
         borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border)',
-        overflow: 'hidden',
+        overflow: 'visible',
       }}>
         {campaigns.length === 0 ? (
           <div className="empty-state" style={{ padding: 'var(--sp-8)' }}>
@@ -167,6 +178,17 @@ export function StartScreen() {
           </div>
         )}
 
+        {error && (
+          <div style={{
+            padding: 'var(--sp-3) var(--sp-4)',
+            background: 'rgba(239, 83, 80, 0.15)',
+            borderTop: '1px solid rgba(239, 83, 80, 0.3)',
+            color: '#EF5350',
+            fontSize: 'var(--text-sm)',
+          }}>
+            ⚠️ {error}
+          </div>
+        )}
         <div style={{ padding: 'var(--sp-3) var(--sp-4)' }}>
           {creating ? (
             <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>

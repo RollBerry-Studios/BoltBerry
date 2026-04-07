@@ -18,6 +18,8 @@ files:
 asarUnpack:
   # better-sqlite3 contains native binaries – must be outside asar
   - node_modules/better-sqlite3/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
 
 # ─── Windows ──────────────────────────────────────────────────────────────────
 win:

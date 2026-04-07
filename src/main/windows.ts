@@ -22,12 +22,19 @@ export function createDMWindow(): BrowserWindow {
     minHeight: 700,
     title: 'BoltBerry – DM',
     backgroundColor: '#121722',
+    show: false,
     webPreferences: {
       preload: preloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // needed for preload to access ipcRenderer
     },
+  })
+
+  dmWindow.maximize()
+
+  dmWindow.once('ready-to-show', () => {
+    dmWindow?.show()
   })
 
   if (isDev) {

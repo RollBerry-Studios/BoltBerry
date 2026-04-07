@@ -52,21 +52,28 @@ export default function App() {
 }
 
 async function loadCampaigns() {
-  if (!window.electronAPI) return
-  const campaigns = await window.electronAPI.dbQuery<{
-    id: number; name: string; created_at: string; last_opened: string
-  }>('SELECT * FROM campaigns ORDER BY last_opened DESC')
+  if (!window.electronAPI) {
+    console.error('[App] electronAPI not available — preload may have failed')
+    return
+  }
+  try {
+    const campaigns = await window.electronAPI.dbQuery<{
+      id: number; name: string; created_at: string; last_opened: string
+    }>('SELECT * FROM campaigns ORDER BY last_opened DESC')
 
-  useCampaignStore.getState().setCampaigns(
-    campaigns.map((c) => ({
-      id: c.id,
-      name: c.name,
-      createdAt: c.created_at,
-      lastOpened: c.last_opened,
-    }))
-  )
+    useCampaignStore.getState().setCampaigns(
+      campaigns.map((c) => ({
+        id: c.id,
+        name: c.name,
+        createdAt: c.created_at,
+        lastOpened: c.last_opened,
+      }))
+    )
 
-  if (campaigns.length > 0) {
-    useCampaignStore.getState().setActiveCampaign(campaigns[0].id)
+    if (campaigns.length > 0) {
+      useCampaignStore.getState().setActiveCampaign(campaigns[0].id)
+    }
+  } catch (err) {
+    console.error('[App] Failed to load campaigns:', err)
   }
 }

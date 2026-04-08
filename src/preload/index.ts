@@ -31,6 +31,7 @@ const dmApi = {
   showContextMenu: (items: { label: string; action: string; danger?: boolean }[]) =>
     ipcRenderer.invoke(IPC.SHOW_CONTEXT_MENU, items),
   deleteMapConfirm: (mapName: string) => ipcRenderer.invoke('DELETE_MAP_CONFIRM', mapName),
+  deleteTokenConfirm: (tokenName: string) => ipcRenderer.invoke(IPC.DELETE_TOKEN_CONFIRM, tokenName),
 
   // File operations
   importFile: (type: 'map' | 'token' | 'atmosphere' | 'audio', campaignId?: number) =>

@@ -14,10 +14,12 @@ function broadcastInitiative() {
 
 export function InitiativePanel() {
   const { t } = useTranslation()
-  const { entries, round, addEntry, removeEntry, nextTurn, resetCombat } = useInitiativeStore()
+  const { entries, round, addEntry, removeEntry, updateEntry, sortEntries, nextTurn, resetCombat } = useInitiativeStore()
   const { activeMapId } = useCampaignStore()
   const [name, setName] = useState('')
   const [roll, setRoll] = useState('')
+  const [editingRollId, setEditingRollId] = useState<number | null>(null)
+  const [editRollValue, setEditRollValue] = useState('')
 
   async function handleAdd() {
     if (!name.trim() || !activeMapId || !window.electronAPI) return
@@ -42,6 +44,11 @@ export function InitiativePanel() {
     }
   }
 
+  function handleSort() {
+    sortEntries()
+    broadcastInitiative()
+  }
+
   function handleNextTurn() {
     nextTurn()
     broadcastInitiative()
@@ -57,12 +64,41 @@ export function InitiativePanel() {
     }
   }
 
+  function startEditRoll(entryId: number, currentRoll: number) {
+    setEditingRollId(entryId)
+    setEditRollValue(String(currentRoll))
+  }
+
+  async function commitEditRoll(entryId: number) {
+    const newRoll = parseInt(editRollValue)
+    if (isNaN(newRoll)) {
+      setEditingRollId(null)
+      return
+    }
+    updateEntry(entryId, { roll: newRoll })
+    try {
+      await window.electronAPI?.dbRun('UPDATE initiative SET roll = ? WHERE id = ?', [newRoll, entryId])
+      broadcastInitiative()
+    } catch (err) {
+      console.error('[InitiativePanel] commitEditRoll failed:', err)
+    }
+    setEditingRollId(null)
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="sidebar-section">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-2)' }}>
           <div className="sidebar-section-title">{t('initiative.title', { round })}</div>
           <div style={{ display: 'flex', gap: 'var(--sp-1)' }}>
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: 'var(--text-xs)', padding: '2px 6px' }}
+              onClick={handleSort}
+              title="Sortieren"
+            >
+              ↕ Sortieren
+            </button>
             <button
               className="btn btn-ghost"
               style={{ fontSize: 'var(--text-xs)', padding: '2px 6px' }}
@@ -125,14 +161,45 @@ export function InitiativePanel() {
                 borderLeft: entry.currentTurn ? '3px solid var(--accent)' : '3px solid transparent',
               }}
             >
-              <span style={{
-                fontSize: 'var(--text-xs)',
-                color: 'var(--text-muted)',
-                minWidth: 20,
-                fontFamily: 'var(--font-mono)',
-              }}>
-                {entry.roll}
-              </span>
+              {editingRollId === entry.id ? (
+                <input
+                  autoFocus
+                  type="number"
+                  value={editRollValue}
+                  onChange={(e) => setEditRollValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitEditRoll(entry.id)
+                    if (e.key === 'Escape') setEditingRollId(null)
+                  }}
+                  onBlur={() => commitEditRoll(entry.id)}
+                  style={{
+                    width: 32,
+                    background: '#182130',
+                    border: '1px solid #2F6BFF',
+                    borderRadius: 3,
+                    color: '#F4F6FA',
+                    fontSize: 'var(--text-xs)',
+                    fontFamily: 'var(--font-mono)',
+                    padding: '1px 4px',
+                    outline: 'none',
+                    textAlign: 'center',
+                  }}
+                />
+              ) : (
+                <span
+                  onDoubleClick={() => startEditRoll(entry.id, entry.roll)}
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--text-muted)',
+                    minWidth: 20,
+                    fontFamily: 'var(--font-mono)',
+                    cursor: 'pointer',
+                  }}
+                  title="Doppelklick zum Bearbeiten"
+                >
+                  {entry.roll}
+                </span>
+              )}
               <span style={{
                 flex: 1,
                 fontSize: 'var(--text-sm)',

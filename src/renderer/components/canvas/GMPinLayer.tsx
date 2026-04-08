@@ -1,4 +1,4 @@
-import { useState, useEffect, RefObject } from 'react'
+import { useState, useEffect, useCallback, RefObject } from 'react'
 import { Layer, Group, Text, Circle, Rect } from 'react-konva'
 import { Html } from 'react-konva-utils'
 import Konva from 'konva'
@@ -19,11 +19,14 @@ interface GMPinLayerProps {
   gridSize: number
 }
 
+export const GM_PIN_ADD_EVENT = 'gm-pin-add'
+
 export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
   const { scale, offsetX, offsetY } = useMapTransformStore()
   const [pins, setPins] = useState<GMPin[]>([])
   const [editingPinId, setEditingPinId] = useState<number | null>(null)
   const [editingLabel, setEditingLabel] = useState('')
+  const [selectedPinId, setSelectedPinId] = useState<number | null>(null)
   const [loadedMapId, setLoadedMapId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -33,16 +36,7 @@ export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
     }
   }, [mapId, loadedMapId])
 
-  async function handleAddPin(e: Konva.KonvaEventObject<MouseEvent>) {
-    if (e.evt.button !== 2) return
-    e.evt.preventDefault()
-    const stage = stageRef.current
-    if (!stage) return
-    const pos = stage.getPointerPosition()
-    if (!pos) return
-    const mx = (pos.x - offsetX) / scale
-    const my = (pos.y - offsetY) / scale
-
+  const addPinAt = useCallback(async (mx: number, my: number) => {
     try {
       const result = await window.electronAPI?.dbRun(
         'INSERT INTO gm_pins (map_id, x, y, label, icon, color) VALUES (?, ?, ?, ?, ?, ?)',
@@ -54,7 +48,26 @@ export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
     } catch (err) {
       console.error('[GMPinLayer] add pin failed:', err)
     }
-  }
+  }, [mapId])
+
+  useEffect(() => {
+    const handler = (e: CustomEvent<{ x: number; y: number }>) => {
+      addPinAt(e.detail.x, e.detail.y)
+    }
+    window.addEventListener(GM_PIN_ADD_EVENT, handler as EventListener)
+    return () => window.removeEventListener(GM_PIN_ADD_EVENT, handler as EventListener)
+  }, [addPinAt])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' && selectedPinId !== null) {
+        handleDeletePin(selectedPinId)
+        setSelectedPinId(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedPinId])
 
   async function handleDeletePin(id: number) {
     try {
@@ -76,7 +89,7 @@ export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
   }
 
   return (
-    <Layer onContextMenu={handleAddPin}>
+    <Layer onContextMenu={(e) => e.evt.preventDefault()}>
       {pins.map((pin) => {
         const sx = pin.x * scale + offsetX
         const sy = pin.y * scale + offsetY
@@ -93,12 +106,31 @@ export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
                 console.error('[GMPinLayer] drag failed:', err)
               }
             }}
+            onClick={() => setSelectedPinId(pin.id)}
+            onTap={() => setSelectedPinId(pin.id)}
+            onContextMenu={async (e) => {
+              e.evt.preventDefault()
+              e.cancelBubble = true
+              if (!window.electronAPI) return
+              const action = await window.electronAPI.showContextMenu([
+                { label: 'Pin löschen', action: 'delete', danger: true },
+                { label: 'Label bearbeiten', action: 'edit' },
+              ])
+              if (action === 'delete') handleDeletePin(pin.id)
+              else if (action === 'edit') {
+                setEditingPinId(pin.id)
+                setEditingLabel(pin.label)
+              }
+            }}
             onDblClick={() => {
               setEditingPinId(pin.id)
               setEditingLabel(pin.label)
             }}
           >
-            <Circle x={0} y={0} radius={14} fill={pin.color} opacity={0.85} listening={false} />
+            <Circle x={0} y={0} radius={14} fill={pin.color} opacity={0.85} listening={false}
+              stroke={selectedPinId === pin.id ? '#F4F6FA' : undefined}
+              strokeWidth={selectedPinId === pin.id ? 2 : 0}
+            />
             <Text x={-7} y={-9} text={pin.icon} fontSize={14} listening={false} />
             {pin.label && editingPinId !== pin.id && (
               <Rect x={-pin.label.length * 3} y={16} width={pin.label.length * 6 + 8} height={16}

@@ -37,6 +37,9 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
   const [editingHpId, setEditingHpId] = useState<number | null>(null)
   const [editHpCurrent, setEditHpCurrent] = useState('')
   const [editHpMax, setEditHpMax] = useState('')
+  const [editingAcId, setEditingAcId] = useState<number | null>(null)
+  const [editAc, setEditAc] = useState('')
+  const [markerSubmenuId, setMarkerSubmenuId] = useState<number | null>(null)
   const [rubberBand, setRubberBand] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
 
   const isDraggable = activeTool === 'select'
@@ -144,6 +147,7 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
 
   function closeContextMenu() {
     setContextMenu((m) => ({ ...m, visible: false }))
+    setMarkerSubmenuId(null)
   }
 
   function startEdit(token: TokenRecord) {
@@ -159,6 +163,12 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     closeContextMenu()
   }
 
+  function startEditAc(token: TokenRecord) {
+    setEditingAcId(token.id)
+    setEditAc(token.ac != null ? String(token.ac) : '')
+    closeContextMenu()
+  }
+
   async function commitEditHp(id: number) {
     const hpCurrent = parseInt(editHpCurrent) || 0
     const hpMax = parseInt(editHpMax) || 0
@@ -170,6 +180,24 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
       console.error('[TokenLayer] commitEditHp failed:', err)
     }
     setEditingHpId(null)
+  }
+
+  async function commitEditAc(id: number) {
+    const acVal = editAc.trim() === '' ? null : parseInt(editAc) || 0
+    handleUpdate(id, { ac: acVal as any })
+    setEditingAcId(null)
+  }
+
+  function handleUpdate(id: number, updates: Record<string, any>) {
+    updateToken(id, updates)
+    const cols = Object.keys(updates).map((k) => {
+      const col = k.replace(/([A-Z])/g, '_$1').toLowerCase()
+      return `${col} = ?`
+    }).join(', ')
+    const vals = Object.values(updates).map((v) => typeof v === 'boolean' ? (v ? 1 : 0) : v)
+    window.electronAPI?.dbRun(`UPDATE tokens SET ${cols} WHERE id = ?`, [...vals, id])
+      .then(() => broadcastTokens(useTokenStore.getState().tokens))
+      .catch((err: any) => console.error('[TokenLayer] handleUpdate failed:', err))
   }
 
   async function commitEdit(id: number) {
@@ -187,6 +215,9 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
   async function handleDelete(id: number) {
     closeContextMenu()
     const idsToDelete = selectedTokenIds.includes(id) ? selectedTokenIds : [id]
+    const names = idsToDelete.map((did) => tokens.find((t) => t.id === did)?.name ?? 'Token').join(', ')
+    const confirmed = await window.electronAPI?.deleteTokenConfirm(names)
+    if (!confirmed) return
     for (const did of idsToDelete) {
       removeToken(did)
     }
@@ -251,6 +282,17 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     }
   }
 
+  function handleToggleLock(token: TokenRecord) {
+    handleUpdate(token.id, { locked: !token.locked })
+    closeContextMenu()
+  }
+
+  function handleSetMarker(tokenId: number, color: string | null) {
+    handleUpdate(tokenId, { markerColor: color })
+    setMarkerSubmenuId(null)
+    closeContextMenu()
+  }
+
   return (
     <>
       <Layer
@@ -278,11 +320,15 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
               isEditingHp={editingHpId === token.id}
               editHpCurrent={editHpCurrent}
               editHpMax={editHpMax}
+              isEditingAc={editingAcId === token.id}
+              editAc={editAc}
               onEditNameChange={setEditName}
               onEditCommit={() => commitEdit(token.id)}
               onEditHpCurrentChange={setEditHpCurrent}
               onEditHpMaxChange={setEditHpMax}
               onEditHpCommit={() => commitEditHp(token.id)}
+              onEditAcChange={setEditAc}
+              onEditAcCommit={() => commitEditAc(token.id)}
               onSelect={(e?: Konva.KonvaEventObject<MouseEvent>) => {
                 if (e?.evt?.shiftKey) {
                   toggleTokenInSelection(token.id)
@@ -336,38 +382,108 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
                 }}
                 onMouseLeave={closeContextMenu}
               >
-                {[
-                  { label: '✏️ Umbenennen', action: () => startEdit(token) },
-                  { label: '❤️ HP bearbeiten', action: () => startEditHp(token) },
-                  { label: token.visibleToPlayers ? '🙈 Verstecken' : '👁 Sichtbar machen', action: () => handleToggleVisibility(token) },
-                  { label: '📋 Duplizieren', action: () => handleDuplicate(token) },
-                  null,
-                  { label: '❌ Löschen', action: () => handleDelete(token.id), danger: true },
-                ].map((item, i) =>
-                  item === null ? (
-                    <div key={i} style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
-                  ) : (
-                    <button
-                      key={i}
-                      onClick={item.action}
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        padding: '6px 12px',
-                        background: 'none',
-                        border: 'none',
-                        textAlign: 'left',
-                        fontSize: 'var(--text-sm)',
-                        color: (item as any).danger ? 'var(--danger)' : 'var(--text-primary)',
-                        cursor: 'pointer',
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-overlay)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-                    >
-                      {item.label}
-                    </button>
-                  )
-                )}
+                {(() => {
+                  const MARKER_COLORS = [
+                    { label: 'Keine', color: null },
+                    { label: 'Rot', color: '#ef4444' },
+                    { label: 'Amber', color: '#f59e0b' },
+                    { label: 'Grün', color: '#22c55e' },
+                    { label: 'Blau', color: '#3b82f6' },
+                    { label: 'Lila', color: '#a855f7' },
+                    { label: 'Pink', color: '#ec4899' },
+                  ]
+                  const menuItems: any[] = [
+                    { label: '✏️ Umbenennen', action: () => startEdit(token) },
+                    { label: '❤️ HP bearbeiten', action: () => startEditHp(token) },
+                    { label: '🛡 AC bearbeiten', action: () => startEditAc(token) },
+                    { label: token.visibleToPlayers ? '🙈 Verstecken' : '👁 Sichtbar machen', action: () => handleToggleVisibility(token) },
+                    { label: '📋 Duplizieren', action: () => handleDuplicate(token) },
+                    { label: token.locked ? '🔓 Entsperren' : '🔒 Sperren', action: () => handleToggleLock(token) },
+                    { label: '🏷 Markierung', action: null, submenu: true },
+                    null,
+                    { label: '❌ Löschen', action: () => handleDelete(token.id), danger: true },
+                  ]
+                  return menuItems.map((item, i) => {
+                    if (item === null) {
+                      return <div key={i} style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
+                    }
+                    if (item.submenu) {
+                      const isSubOpen = markerSubmenuId === token.id
+                      const MARKER_COLORS_LOCAL = MARKER_COLORS
+                      return (
+                        <div key={i}>
+                          <button
+                            onClick={() => setMarkerSubmenuId(isSubOpen ? null : token.id)}
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              padding: '6px 12px',
+                              background: 'none',
+                              border: 'none',
+                              textAlign: 'left',
+                              fontSize: 'var(--text-sm)',
+                              color: 'var(--text-primary)',
+                              cursor: 'pointer',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-overlay)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                          >
+                            🏷 Markierung {isSubOpen ? '▲' : '▶'} {token.markerColor && <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: token.markerColor, marginLeft: 4, verticalAlign: 'middle' }} />}
+                          </button>
+                          {isSubOpen && (
+                            <div style={{ background: 'var(--bg-elevated)', padding: '2px 0' }}>
+                              {MARKER_COLORS_LOCAL.map((mc) => (
+                                <button
+                                  key={mc.color ?? 'none'}
+                                  onClick={() => handleSetMarker(token.id, mc.color)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 6,
+                                    width: '100%',
+                                    padding: '4px 12px 4px 24px',
+                                    background: token.markerColor === mc.color ? 'var(--bg-overlay)' : 'none',
+                                    border: 'none',
+                                    textAlign: 'left',
+                                    fontSize: 'var(--text-sm)',
+                                    color: 'var(--text-primary)',
+                                    cursor: 'pointer',
+                                  }}
+                                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-overlay)')}
+                                  onMouseLeave={(e) => (e.currentTarget.style.background = token.markerColor === mc.color ? 'var(--bg-overlay)' : 'none')}
+                                >
+                                  {mc.color ? <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: mc.color }} /> : <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', border: '1px solid var(--border)' }} />}
+                                  {mc.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }
+                    return (
+                      <button
+                        key={i}
+                        onClick={item.action}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          padding: '6px 12px',
+                          background: 'none',
+                          border: 'none',
+                          textAlign: 'left',
+                          fontSize: 'var(--text-sm)',
+                          color: item.danger ? 'var(--danger)' : 'var(--text-primary)',
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-overlay)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  })
+                })()}
               </div>
             </Html>
           )
@@ -391,11 +507,15 @@ interface TokenNodeProps {
   isEditingHp: boolean
   editHpCurrent: string
   editHpMax: string
+  isEditingAc: boolean
+  editAc: string
   onEditNameChange: (v: string) => void
   onEditCommit: () => void
   onEditHpCurrentChange: (v: string) => void
   onEditHpMaxChange: (v: string) => void
   onEditHpCommit: () => void
+  onEditAcChange: (v: string) => void
+  onEditAcCommit: () => void
   onSelect: (e?: Konva.KonvaEventObject<MouseEvent>) => void
   onDblClick: () => void
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void
@@ -404,9 +524,10 @@ interface TokenNodeProps {
 
 const TokenNode = memo(function TokenNode({
   token, x, y, sizePx, isDraggable, isSelected,
-  isEditing, editName, isEditingHp, editHpCurrent, editHpMax,
+  isEditing, editName, isEditingHp, editHpCurrent, editHpMax, isEditingAc, editAc,
   onEditNameChange, onEditCommit,
   onEditHpCurrentChange, onEditHpMaxChange, onEditHpCommit,
+  onEditAcChange, onEditAcCommit,
   onSelect, onDblClick, onDragEnd, onContextMenu,
 }: TokenNodeProps) {
   const image = useImage(token.imagePath ? `file://${token.imagePath}` : null)
@@ -609,6 +730,35 @@ const TokenNode = memo(function TokenNode({
               }}
             />
           </div>
+        </Html>
+      ) : isEditingAc ? (
+        <Html divProps={{ style: { position: 'absolute', top: 0, left: 0 } }}>
+          <input
+            autoFocus
+            type="number"
+            value={editAc}
+            onChange={(e) => onEditAcChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onEditAcCommit()
+              if (e.key === 'Escape') onEditAcCommit()
+            }}
+            onBlur={onEditAcCommit}
+            placeholder="AC"
+            style={{
+              position: 'absolute',
+              left: x - 20,
+              top: y - 30,
+              width: 40 + sizePx,
+              background: '#0D1015',
+              border: '1px solid #64748b',
+              borderRadius: 4,
+              color: '#F4F6FA',
+              fontSize: 12,
+              padding: '2px 6px',
+              outline: 'none',
+              textAlign: 'center',
+            }}
+          />
         </Html>
       ) : (
         <Text

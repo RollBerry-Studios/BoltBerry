@@ -7,7 +7,8 @@ import { PointerLayer } from './PointerLayer'
 import { MeasureLayer } from './MeasureLayer'
 import { MinimapOverlay } from './MinimapOverlay'
 import { DrawingLayer } from './DrawingLayer'
-import { GMPinLayer } from './GMPinLayer'
+import { DrawingToolbar } from './DrawingToolbar'
+import { GMPinLayer, GM_PIN_ADD_EVENT } from './GMPinLayer'
 import { LightingLayer } from './LightingLayer'
 import { useUIStore } from '../../stores/uiStore'
 import { useCampaignStore } from '../../stores/campaignStore'
@@ -19,10 +20,26 @@ import { useImageUrl } from '../../hooks/useImageUrl'
 import type Konva from 'konva'
 import type { MapRecord, PlayerFullState } from '@shared/ipc-types'
 
+function broadcastTokensFromCanvas() {
+  if (useUIStore.getState().sessionMode === 'prep') return
+  const tokens = useTokenStore.getState().tokens
+  const visible = tokens
+    .filter((t) => t.visibleToPlayers)
+    .map((t) => ({
+      id: t.id, name: t.name, imagePath: t.imagePath,
+      x: t.x, y: t.y, size: t.size,
+      hpCurrent: t.hpCurrent, hpMax: t.hpMax, showName: true,
+      rotation: t.rotation, markerColor: t.markerColor,
+      statusEffects: t.statusEffects, ac: t.ac,
+    }))
+  window.electronAPI?.sendTokenUpdate(visible)
+}
+
 export function CanvasArea() {
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
   const [size, setSize] = useState({ width: 800, height: 600 })
+  const [dropHighlight, setDropHighlight] = useState(false)
 
   const { activeTool, blackoutActive, appMode, atmosphereImagePath, showMinimap } = useUIStore()
   const { activeMapId, activeMaps } = useCampaignStore()
@@ -63,11 +80,123 @@ export function CanvasArea() {
     loadMapData(activeMapId, activeMap)
   }, [activeMapId])
 
+  // Drag-and-drop: import image files directly onto the canvas
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDropHighlight(false)
+    if (!activeMapId || !window.electronAPI) return
+
+    // Handle OS file drops
+    if (e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0]
+      if (!file.type.startsWith('image/')) return
+      const arrayBuf = await file.arrayBuffer()
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuf)))
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png'
+      const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png'
+      const dataUrl = `data:${mimeType};base64,${base64}`
+
+      const result = await window.electronAPI.saveAssetImage({
+        dataUrl,
+        originalName: file.name,
+        type: 'token',
+        campaignId: useCampaignStore.getState().activeCampaignId ?? 0,
+      })
+      if (!result) return
+
+      // Get drop position in map coordinates
+      const stage = stageRef.current
+      const container = containerRef.current
+      if (!stage || !container) return
+      const rect = container.getBoundingClientRect()
+      const pointerX = e.clientX - rect.left
+      const pointerY = e.clientY - rect.top
+      const mapPos = useMapTransformStore.getState().screenToMap(pointerX, pointerY)
+      const gridSize = activeMap?.gridSize ?? 50
+      const shouldSnap = useUIStore.getState().gridSnap && activeMap?.gridType !== 'none'
+      const x = shouldSnap ? Math.round(mapPos.x / gridSize) * gridSize : mapPos.x
+      const y = shouldSnap ? Math.round(mapPos.y / gridSize) * gridSize : mapPos.y
+
+      const dbResult = await window.electronAPI.dbRun(
+        `INSERT INTO tokens (map_id, name, image_path, x, y) VALUES (?, ?, ?, ?, ?)`,
+        [activeMapId, file.name.replace(/\.[^.]+$/, ''), result.path, x, y]
+      )
+
+      useTokenStore.getState().addToken({
+        id: dbResult.lastInsertRowid,
+        mapId: activeMapId,
+        name: file.name.replace(/\.[^.]+$/, ''),
+        imagePath: result.path,
+        x, y,
+        size: 1,
+        hpCurrent: 0,
+        hpMax: 0,
+        visibleToPlayers: true,
+        rotation: 0,
+        locked: false,
+        zIndex: 0,
+        markerColor: null,
+        ac: null,
+        notes: null,
+        statusEffects: null,
+      })
+      broadcastTokensFromCanvas()
+      return
+    }
+
+    // Handle asset-path drops from AssetBrowser (storedPath in dataTransfer)
+    const storedPath = e.dataTransfer.getData('application/boltberry-asset-path')
+    const assetType = e.dataTransfer.getData('application/boltberry-asset-type')
+    if (storedPath && assetType === 'token' && activeMapId) {
+      const stage = stageRef.current
+      const container = containerRef.current
+      if (!stage || !container) return
+      const rect = container.getBoundingClientRect()
+      const pointerX = e.clientX - rect.left
+      const pointerY = e.clientY - rect.top
+      const mapPos = useMapTransformStore.getState().screenToMap(pointerX, pointerY)
+      const gridSize = activeMap?.gridSize ?? 50
+      const shouldSnap = useUIStore.getState().gridSnap && activeMap?.gridType !== 'none'
+      const x = shouldSnap ? Math.round(mapPos.x / gridSize) * gridSize : mapPos.x
+      const y = shouldSnap ? Math.round(mapPos.y / gridSize) * gridSize : mapPos.y
+
+      const dbResult = await window.electronAPI.dbRun(
+        `INSERT INTO tokens (map_id, name, image_path, x, y) VALUES (?, ?, ?, ?, ?)`,
+        [activeMapId, storedPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') ?? 'Token', storedPath, x, y]
+      )
+
+      useTokenStore.getState().addToken({
+        id: dbResult.lastInsertRowid,
+        mapId: activeMapId,
+        name: storedPath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') ?? 'Token',
+        imagePath: storedPath,
+        x, y,
+        size: 1, hpCurrent: 0, hpMax: 0, visibleToPlayers: true, rotation: 0,
+        locked: false, zIndex: 0, markerColor: null, ac: null, notes: null, statusEffects: null,
+      })
+      broadcastTokensFromCanvas()
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('application/boltberry-asset-path')) {
+      setDropHighlight(true)
+    }
+  }
+
+  function handleDragLeave() {
+    setDropHighlight(false)
+  }
+
   return (
     <div
       ref={containerRef}
       className="canvas-area"
-      style={{ cursor: getCursor(activeTool) }}
+      style={{ cursor: getCursor(activeTool), position: 'relative' }}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
     >
       {/* Atmosphere mode: show image fullscreen */}
       {appMode === 'atmosphere' && atmosphereImagePath ? (
@@ -95,7 +224,24 @@ export function CanvasArea() {
           width={size.width}
           height={size.height}
           style={{ display: 'block' }}
-          onContextMenu={(e) => e.evt.preventDefault()}
+          onContextMenu={async (e) => {
+            e.evt.preventDefault()
+            if (!window.electronAPI) return
+            const action = await window.electronAPI.showContextMenu([
+              { label: 'Kamera zentrieren', action: 'center-camera' },
+              { label: 'GM-Pin setzen', action: 'add-gm-pin' },
+            ])
+            if (action === 'center-camera') {
+              useMapTransformStore.getState().fitToScreen()
+            } else if (action === 'add-gm-pin') {
+              useUIStore.getState().setActiveTool('select')
+              const pos = e.target.getStage()?.getPointerPosition()
+              if (pos) {
+                const mapPos = useMapTransformStore.getState().screenToMap(pos.x, pos.y)
+                window.dispatchEvent(new CustomEvent(GM_PIN_ADD_EVENT, { detail: { x: mapPos.x, y: mapPos.y } }))
+              }
+            }
+          }}
         >
           {/* Layer 1: Map image + grid */}
           <MapLayer
@@ -151,7 +297,24 @@ export function CanvasArea() {
         </Stage>
       )}
 
-       {/* Blackout overlay */}
+      {/* Drop highlight overlay */}
+      {dropHighlight && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 100,
+          border: '3px dashed #2F6BFF', borderRadius: 8,
+          background: 'rgba(47,107,255,0.08)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            fontSize: 18, fontWeight: 700, color: '#2F6BFF',
+            background: 'rgba(13,16,21,0.85)', padding: '12px 24px',
+            borderRadius: 8,
+          }}>Token hier ablegen</div>
+        </div>
+      )}
+
+      {/* Blackout overlay */}
       {blackoutActive && (
         <div
           className="blackout-overlay"
@@ -165,6 +328,9 @@ export function CanvasArea() {
       {showMinimap && activeMap && (
         <MinimapOverlay stageRef={stageRef} canvasSize={size} />
       )}
+
+      {/* Drawing toolbar */}
+      <DrawingToolbar />
     </div>
   )
 }

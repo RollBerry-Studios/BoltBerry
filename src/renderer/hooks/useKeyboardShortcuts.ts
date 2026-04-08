@@ -67,8 +67,10 @@ export function useKeyboardShortcuts() {
         case 'd': case 'D':
           useUIStore.getState().setActiveTool('draw-freehand')
           break
-        case 't': case 'T':
-          useUIStore.getState().setActiveTool('select') // token mode via sidebar
+        case 't':
+          useUIStore.getState().setActiveTool('token')
+          break
+        case 'T':
           useUIStore.getState().setSidebarTab('tokens')
           break
         case 'n': case 'N':
@@ -85,14 +87,19 @@ export function useKeyboardShortcuts() {
           const { selectedTokenIds } = useUIStore.getState()
           if (selectedTokenIds.length > 0) {
             const ids = [...selectedTokenIds]
-            for (const id of ids) {
-              useTokenStore.getState().removeToken(id)
-            }
-            window.electronAPI?.dbRun(
-              `DELETE FROM tokens WHERE id IN (${ids.map(() => '?').join(',')})`,
-              ids
-            )
-            useUIStore.getState().clearTokenSelection()
+            const tokens = useTokenStore.getState().tokens
+            const names = ids.map((id) => tokens.find((t) => t.id === id)?.name ?? 'Token').join(', ')
+            window.electronAPI?.deleteTokenConfirm(names).then((confirmed) => {
+              if (!confirmed) return
+              for (const id of ids) {
+                useTokenStore.getState().removeToken(id)
+              }
+              window.electronAPI?.dbRun(
+                `DELETE FROM tokens WHERE id IN (${ids.map(() => '?').join(',')})`,
+                ids
+              )
+              useUIStore.getState().clearTokenSelection()
+            })
           }
           break
         }

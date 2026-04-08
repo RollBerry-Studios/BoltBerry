@@ -351,4 +351,21 @@ export function registerAppHandlers(): void {
     })
     return response === 1
   })
+
+  // Delete token (with native confirmation dialog)
+  ipcMain.handle(IPC.DELETE_TOKEN_CONFIRM, async (event, tokenName: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return false
+
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Token löschen',
+      message: `Token "${tokenName}" wirklich löschen?`,
+      detail: 'Diese Aktion kann nicht rückgängig gemacht werden.',
+      buttons: ['Abbrechen', 'Löschen'],
+      defaultId: 0,
+      cancelId: 0,
+    })
+    return response === 1
+  })
 }

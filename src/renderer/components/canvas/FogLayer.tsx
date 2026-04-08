@@ -1,5 +1,5 @@
-import { useRef, useEffect, RefObject, useCallback } from 'react'
-import { Layer } from 'react-konva'
+import { useRef, useState, useEffect, RefObject, useCallback } from 'react'
+import { Layer, Rect, Circle } from 'react-konva'
 import Konva from 'konva'
 import { useFogStore, type FogOperation } from '../../stores/fogStore'
 import { useUIStore, type ActiveTool } from '../../stores/uiStore'
@@ -28,9 +28,10 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool }: FogLayerPr
 
   const isDrawing    = useRef(false)
   const startMapPos  = useRef({ x: 0, y: 0 })
+  const [dragRect, setDragRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
 
   const { pushOperation, pendingPoints, addPendingPoint, clearPendingPoints, undo, redo } = useFogStore()
-  const { screenToMap } = useMapTransformStore()
+  const { screenToMap, mapToScreen } = useMapTransformStore()
   const { scale, offsetX, offsetY, imgW, imgH } = useMapTransformStore()
   const { activeMapId } = useCampaignStore()
 
@@ -167,11 +168,20 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool }: FogLayerPr
     }
     isDrawing.current = true
     startMapPos.current = pos
+    setDragRect({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y })
+  }
+
+  function handleMouseMove(_e: Konva.KonvaEventObject<MouseEvent>) {
+    if (!isDrawing.current || activeTool !== 'fog-rect') return
+    const pos = getMapPos()
+    if (!pos) return
+    setDragRect(prev => prev ? { ...prev, x2: pos.x, y2: pos.y } : null)
   }
 
   function handleMouseUp(e: Konva.KonvaEventObject<MouseEvent>) {
     if (!isDrawing.current || !isFogActive) return
     isDrawing.current = false
+    setDragRect(null)
     const pos = getMapPos()
     if (!pos) return
 
@@ -196,14 +206,51 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool }: FogLayerPr
     clearPendingPoints()
   }
 
+  const previewColor = isReveal ? '#22c55e' : '#ef4444'
+  const vertexColor  = isReveal ? '#22c55e' : '#ef4444'
+
+  const rectPreview = dragRect && activeTool === 'fog-rect' ? (() => {
+    const tl = mapToScreen(
+      Math.min(dragRect.x1, dragRect.x2),
+      Math.min(dragRect.y1, dragRect.y2),
+    )
+    const br = mapToScreen(
+      Math.max(dragRect.x1, dragRect.x2),
+      Math.max(dragRect.y1, dragRect.y2),
+    )
+    return (
+      <Rect
+        x={tl.x}
+        y={tl.y}
+        width={br.x - tl.x}
+        height={br.y - tl.y}
+        stroke={previewColor}
+        strokeWidth={2}
+        dash={[6, 4]}
+        listening={false}
+      />
+    )
+  })() : null
+
+  const polygonVertices = activeTool === 'fog-polygon' && pendingPoints.length >= 2
+    ? Array.from({ length: pendingPoints.length / 2 }, (_, i) => {
+        const sx = mapToScreen(pendingPoints[i * 2], pendingPoints[i * 2 + 1])
+        return <Circle key={i} x={sx.x} y={sx.y} radius={4} fill={vertexColor} listening={false} />
+      })
+    : []
+
   return (
     <Layer
       ref={layerRef}
       onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onDblClick={handleDblClick}
       listening={isFogActive}
-    />
+    >
+      {rectPreview}
+      {polygonVertices}
+    </Layer>
   )
 }
 

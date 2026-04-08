@@ -3,6 +3,7 @@ import { useUIStore } from '../stores/uiStore'
 import { useInitiativeStore } from '../stores/initiativeStore'
 import { useAppStore } from '../stores/appStore'
 import { useCampaignStore } from '../stores/campaignStore'
+import { APP_VERSION } from '@shared/version'
 
 export function StatusBar() {
   const { t, i18n } = useTranslation()
@@ -133,7 +134,7 @@ export function StatusBar() {
       </div>
 
       <div className="statusbar-item" style={{ color: 'var(--text-muted)', borderLeft: '1px solid var(--border-subtle)', paddingLeft: 'var(--sp-4)' }}>
-        {t('app.version', { version: '0.1.0' })}
+        {t('app.version', { version: APP_VERSION })}
       </div>
     </div>
   )

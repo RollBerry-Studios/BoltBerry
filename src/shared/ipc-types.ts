@@ -50,6 +50,9 @@ export const IPC = {
 
   // Context menu
   SHOW_CONTEXT_MENU: 'app:show-context-menu',
+
+  // Token delete confirmation
+  DELETE_TOKEN_CONFIRM: 'app:delete-token-confirm',
 } as const
 
 // ─── Shared Data Types ────────────────────────────────────────────────────────

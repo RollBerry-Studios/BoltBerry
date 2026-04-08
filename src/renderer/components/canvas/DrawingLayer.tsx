@@ -1,5 +1,5 @@
 import { useState, useEffect, RefObject } from 'react'
-import { Layer, Line, Rect, Circle, Text as KonvaText, Shape } from 'react-konva'
+import { Layer, Line, Rect, Circle, Text as KonvaText } from 'react-konva'
 import Konva from 'konva'
 import { useUIStore } from '../../stores/uiStore'
 import { useMapTransformStore } from '../../stores/mapTransformStore'
@@ -25,11 +25,10 @@ const DRAWING_TOOLS = new Set<string>(['draw-freehand', 'draw-rect', 'draw-circl
 
 export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
   const { activeTool } = useUIStore()
+  const { drawColor, drawWidth } = useUIStore()
   const { scale, offsetX, offsetY, screenToMap } = useMapTransformStore()
   const [drawings, setDrawings] = useState<Drawing[]>([])
   const [currentPath, setCurrentPath] = useState<number[]>([])
-  const [drawingColor, setDrawingColor] = useState('#ff6b6b')
-  const [drawingWidth, setDrawingWidth] = useState(3)
   const [loadedMapId, setLoadedMapId] = useState<number | null>(null)
 
   useEffect(() => {
@@ -57,7 +56,7 @@ export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
     } else if (activeTool === 'draw-text') {
       const label = prompt('Text:')
       if (label) {
-        addDrawing({ type: 'text', points: [pos.x, pos.y], color: drawingColor, width: drawingWidth, text: label })
+        addDrawing({ type: 'text', points: [pos.x, pos.y], color: drawColor, width: drawWidth, text: label })
       }
     } else if (activeTool === 'draw-rect' || activeTool === 'draw-circle') {
       setCurrentPath([pos.x, pos.y, pos.x, pos.y])
@@ -84,7 +83,7 @@ export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
       activeTool === 'draw-rect' ? 'rect' :
       activeTool === 'draw-circle' ? 'circle' : 'freehand'
 
-    addDrawing({ type, points: currentPath, color: drawingColor, width: drawingWidth })
+    addDrawing({ type, points: currentPath, color: drawColor, width: drawWidth })
     setCurrentPath([])
   }
 
@@ -140,7 +139,7 @@ export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
     if (currentPath.length < 2) return null
     if (activeTool === 'draw-freehand') {
       const screenPoints = currentPath.flatMap((p, i) => i % 2 === 0 ? p * scale + offsetX : p * scale + offsetY)
-      return <Line points={screenPoints} stroke={drawingColor} strokeWidth={drawingWidth * scale} listening={false} />
+      return <Line points={screenPoints} stroke={drawColor} strokeWidth={drawWidth * scale} listening={false} />
     }
     if (activeTool === 'draw-rect') {
       const x1 = currentPath[0] * scale + offsetX
@@ -149,7 +148,7 @@ export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
       const y2 = currentPath[3] * scale + offsetY
       return <Rect x={Math.min(x1, x2)} y={Math.min(y1, y2)}
         width={Math.abs(x2 - x1)} height={Math.abs(y2 - y1)}
-        stroke={drawingColor} strokeWidth={drawingWidth * scale} dash={[4, 3]} listening={false} />
+        stroke={drawColor} strokeWidth={drawWidth * scale} dash={[4, 3]} listening={false} />
     }
     if (activeTool === 'draw-circle') {
       const cx = currentPath[0] * scale + offsetX
@@ -158,7 +157,7 @@ export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
       const dy = currentPath[3] - currentPath[1]
       const radius = Math.sqrt(dx * dx + dy * dy) * scale
       return <Circle x={cx} y={cy} radius={radius}
-        stroke={drawingColor} strokeWidth={drawingWidth * scale} dash={[4, 3]} listening={false} />
+        stroke={drawColor} strokeWidth={drawWidth * scale} dash={[4, 3]} listening={false} />
     }
     return null
   }

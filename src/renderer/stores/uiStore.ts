@@ -24,6 +24,8 @@ interface UIState {
   cameraFollowDM: boolean
   gridSnap: boolean
   showMinimap: boolean
+  drawColor: string
+  drawWidth: number
 
   setActiveTool: (tool: ActiveTool) => void
   setSidebarTab: (tab: SidebarTab) => void
@@ -43,6 +45,8 @@ interface UIState {
   toggleCameraFollow: () => void
   toggleGridSnap: () => void
   toggleMinimap: () => void
+  setDrawColor: (color: string) => void
+  setDrawWidth: (width: number) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -62,6 +66,8 @@ export const useUIStore = create<UIState>((set) => ({
   cameraFollowDM: false,
   gridSnap: true,
   showMinimap: false,
+  drawColor: '#ff6b6b',
+  drawWidth: 3,
 
   setActiveTool: (activeTool) => set({ activeTool }),
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
@@ -104,4 +110,6 @@ export const useUIStore = create<UIState>((set) => ({
   toggleCameraFollow: () => set((s) => ({ cameraFollowDM: !s.cameraFollowDM })),
   toggleGridSnap: () => set((s) => ({ gridSnap: !s.gridSnap })),
   toggleMinimap: () => set((s) => ({ showMinimap: !s.showMinimap })),
+  setDrawColor: (drawColor) => set({ drawColor }),
+  setDrawWidth: (drawWidth) => set({ drawWidth }),
 }))

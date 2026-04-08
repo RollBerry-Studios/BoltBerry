@@ -128,12 +128,18 @@ export function AssetBrowser() {
               <div
                 key={asset.id}
                 title={asset.originalName}
+                draggable={asset.type === 'token' || asset.type === 'map'}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('application/boltberry-asset-path', asset.storedPath)
+                  e.dataTransfer.setData('application/boltberry-asset-type', asset.type)
+                  e.dataTransfer.effectAllowed = 'copy'
+                }}
                 style={{
                   borderRadius: 'var(--radius)',
                   border: '1px solid var(--border-subtle)',
                   overflow: 'hidden',
                   background: 'var(--bg-elevated)',
-                  cursor: asset.type === 'token' && activeMapId ? 'pointer' : 'default',
+                  cursor: asset.type === 'token' && activeMapId ? 'grab' : 'default',
                   position: 'relative',
                 }}
                 onClick={() => asset.type === 'token' && activeMapId ? handleDropTokenOnMap(asset) : undefined}

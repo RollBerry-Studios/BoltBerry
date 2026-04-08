@@ -17,7 +17,7 @@ import { useMapTransformStore } from '../../stores/mapTransformStore'
 import { useFogStore } from '../../stores/fogStore'
 import { useImageUrl } from '../../hooks/useImageUrl'
 import type Konva from 'konva'
-import type { MapRecord } from '@shared/ipc-types'
+import type { MapRecord, PlayerFullState } from '@shared/ipc-types'
 
 export function CanvasArea() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -171,6 +171,7 @@ export function CanvasArea() {
 
 function getCursor(tool: string): string {
   switch (tool) {
+    case 'select':       return 'grab'
     case 'fog-rect':      return 'crosshair'
     case 'fog-polygon':   return 'crosshair'
     case 'fog-cover':     return 'crosshair'
@@ -263,8 +264,15 @@ async function loadMapData(mapId: number, map: MapRecord) {
       console.error('[CanvasArea] drawings load failed:', err)
     }
 
+    const { blackoutActive, appMode, atmosphereImagePath } = useUIStore.getState()
+    const syncMode: PlayerFullState['mode'] = blackoutActive
+      ? 'blackout'
+      : appMode === 'atmosphere'
+        ? 'atmosphere'
+        : 'map'
+
     window.electronAPI?.sendFullSync({
-      mode: 'map',
+      mode: syncMode,
       map: {
         imagePath: map.imagePath,
         gridType: map.gridType,
@@ -290,8 +298,8 @@ async function loadMapData(mapId: number, map: MapRecord) {
         })),
       fogBitmap,
       exploredBitmap,
-      atmosphereImagePath: null,
-      blackout: useUIStore.getState().blackoutActive,
+      atmosphereImagePath: appMode === 'atmosphere' ? atmosphereImagePath : null,
+      blackout: blackoutActive,
       drawings: playerDrawings,
     })
 

@@ -89,11 +89,14 @@ export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
     }, 600)
   }
 
-  // ── Pan: middle-mouse button OR Alt+left-drag ──────────────────────────────
+  // ── Pan: middle-mouse, Alt+left-drag, or left-drag with select tool on background ─
   function handleMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
     const isMiddle = e.evt.button === 1
     const isAltLeft = e.evt.button === 0 && e.evt.altKey
-    if (!isMiddle && !isAltLeft) return
+    const isSelectPan = e.evt.button === 0 && activeTool === 'select'
+    // Only start select-tool panning when clicking on empty canvas (stage background)
+    if (isSelectPan && e.target !== e.target.getStage()) return
+    if (!isMiddle && !isAltLeft && !isSelectPan) return
     e.evt.preventDefault()
     isPanning.current = true
     lastPointer.current = { x: e.evt.clientX, y: e.evt.clientY }

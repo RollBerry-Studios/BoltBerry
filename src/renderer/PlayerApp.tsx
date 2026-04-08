@@ -26,6 +26,9 @@ export default function PlayerApp() {
   const [measure, setMeasure] = useState<PlayerMeasureState | null>(null)
   const [drawingData, setDrawingData] = useState<PlayerDrawingState[]>([])
 
+  const mapStateRef = useRef<PlayerMapState | null>(null)
+  mapStateRef.current = mapState
+
 
   // Dual fog canvases at map natural resolution
   const exploredCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -67,6 +70,7 @@ export default function PlayerApp() {
           return
         }
         if (state.map) {
+          mapStateRef.current = state.map
           setMapState(state.map)
           setMode('map')
           if (state.fogBitmap || state.exploredBitmap) {
@@ -86,6 +90,7 @@ export default function PlayerApp() {
       }),
 
       window.playerAPI.onMapUpdate((state: PlayerMapState) => {
+        mapStateRef.current = state
         setMapState(state)
         setMode('map')
         setCamera(null)
@@ -99,7 +104,12 @@ export default function PlayerApp() {
 
       window.playerAPI.onBlackout((active: boolean) => {
         setBlackout(active)
-        setMode(active ? 'blackout' : (mapState ? 'map' : 'idle'))
+        if (active) {
+          setMode('blackout')
+        } else {
+          const currentMap = mapStateRef.current
+          setMode(currentMap ? 'map' : 'idle')
+        }
       }),
 
       window.playerAPI.onAtmosphere((path: string | null) => {
@@ -107,7 +117,8 @@ export default function PlayerApp() {
           setAtmospherePath(path)
           setMode('atmosphere')
         } else {
-          setMode(mapState ? 'map' : 'idle')
+          const currentMap = mapStateRef.current
+          setMode(currentMap ? 'map' : 'idle')
         }
       }),
 
@@ -439,6 +450,14 @@ function PlayerMapView({
   const [exploredImg, setExploredImg] = useState<HTMLImageElement | null>(null)
   const [coveredImg, setCoveredImg]   = useState<HTMLImageElement | null>(null)
   const pointerLayerRef = useRef<Konva.Layer>(null)
+  const stageRef = useRef<Konva.Stage>(null)
+
+  // Player-local pan/zoom state (used when no DM camera)
+  const [playerScale, setPlayerScale] = useState(1)
+  const [playerOffX, setPlayerOffX] = useState(0)
+  const [playerOffY, setPlayerOffY] = useState(0)
+  const isPanning = useRef(false)
+  const lastPanPos = useRef({ x: 0, y: 0 })
 
   // Notify parent when map image loads → init fog canvases
   useEffect(() => {
@@ -489,9 +508,63 @@ function PlayerMapView({
       offX = width / 2 - camera.imageCenterX * scale
       offY = height / 2 - camera.imageCenterY * scale
     } else {
-      scale = fitScale
-      offX = (width - natW * scale) / 2
-      offY = (height - natH * scale) / 2
+      scale = fitScale * playerScale
+      offX = (width - natW * scale) / 2 + playerOffX
+      offY = (height - natH * scale) / 2 + playerOffY
+    }
+  }
+
+  // Reset player pan/zoom when camera sync activates
+  useEffect(() => {
+    if (camera) {
+      setPlayerScale(1)
+      setPlayerOffX(0)
+      setPlayerOffY(0)
+    }
+  }, [camera])
+
+  function handleWheel(e: Konva.KonvaEventObject<WheelEvent>) {
+    if (camera) return
+    e.evt.preventDefault()
+    const stage = stageRef.current
+    if (!stage) return
+    const zoomFactor = e.evt.deltaY < 0 ? 1.12 : 1 / 1.12
+    const newScale = Math.max(0.1, Math.min(8, playerScale * zoomFactor))
+    const pointer = stage.getPointerPosition()
+    if (!pointer) return
+    const fitScale = Math.min(width / natW, height / natH)
+    const oldTotalScale = fitScale * playerScale
+    const newTotalScale = fitScale * newScale
+    const dx = pointer.x - ((width - natW * oldTotalScale) / 2 + playerOffX)
+    const dy = pointer.y - ((height - natH * oldTotalScale) / 2 + playerOffY)
+    const newOffX = pointer.x - dx * (newTotalScale / oldTotalScale) - (width - natW * newTotalScale) / 2
+    const newOffY = pointer.y - dy * (newTotalScale / oldTotalScale) - (height - natH * newTotalScale) / 2
+    setPlayerScale(newScale)
+    setPlayerOffX(newOffX)
+    setPlayerOffY(newOffY)
+  }
+
+  function handleMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
+    if (camera) return
+    if (e.evt.button !== 0) return
+    isPanning.current = true
+    lastPanPos.current = { x: e.evt.clientX, y: e.evt.clientY }
+    if (stageRef.current) stageRef.current.container().style.cursor = 'grabbing'
+  }
+
+  function handleMouseMove(e: Konva.KonvaEventObject<MouseEvent>) {
+    if (!isPanning.current) return
+    const dx = e.evt.clientX - lastPanPos.current.x
+    const dy = e.evt.clientY - lastPanPos.current.y
+    lastPanPos.current = { x: e.evt.clientX, y: e.evt.clientY }
+    setPlayerOffX((prev) => prev + dx)
+    setPlayerOffY((prev) => prev + dy)
+  }
+
+  function handleMouseUp() {
+    if (isPanning.current) {
+      isPanning.current = false
+      if (stageRef.current) stageRef.current.container().style.cursor = 'default'
     }
   }
 
@@ -516,7 +589,13 @@ function PlayerMapView({
   const cellPx = showGrid ? mapState.gridSize * scale : 0
 
   return (
-    <Stage width={width} height={height} style={{ background: '#000', display: 'block' }}>
+    <Stage ref={stageRef} width={width} height={height} style={{ background: '#000', display: 'block' }}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
       {/* Layer 1: Map image + checkerboard */}
       <Layer>
         {image && (

@@ -149,14 +149,37 @@ export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
       onWheel={handleWheel}
     >
       {image && (
-        <KonvaImage
-          image={image as HTMLImageElement}
-          x={offsetX}
-          y={offsetY}
-          width={natW * scale}
-          height={natH * scale}
-          listening={false}
-        />
+        <>
+          <Shape
+            listening={false}
+            sceneFunc={(ctx) => {
+              const w = natW * scale
+              const h = natH * scale
+              const sz = 16
+              const cols = Math.ceil(w / sz)
+              const rows = Math.ceil(h / sz)
+              ctx.save()
+              ctx.beginPath()
+              ctx.rect(offsetX, offsetY, w, h)
+              ctx.clip()
+              for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                  ctx.fillStyle = (r + c) % 2 === 0 ? '#2a2a2a' : '#1a1a1a'
+                  ctx.fillRect(offsetX + c * sz, offsetY + r * sz, sz, sz)
+                }
+              }
+              ctx.restore()
+            }}
+          />
+          <KonvaImage
+            image={image as HTMLImageElement}
+            x={offsetX}
+            y={offsetY}
+            width={natW * scale}
+            height={natH * scale}
+            listening={false}
+          />
+        </>
       )}
 
       {showGrid && cellPx >= 4 && (

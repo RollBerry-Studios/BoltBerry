@@ -34,6 +34,10 @@ export function useKeyboardShortcuts() {
             e.preventDefault()
             window.electronAPI?.saveNow()
             return
+          case 'p':
+            e.preventDefault()
+            window.electronAPI?.openPlayerWindow()
+            return
         }
         return
       }
@@ -67,16 +71,22 @@ export function useKeyboardShortcuts() {
 
         case 'Escape':
           useFogStore.getState().clearPendingPoints()
-          useUIStore.getState().setSelectedToken(null)
+          useUIStore.getState().clearTokenSelection()
           useUIStore.getState().setActiveTool('select')
           break
 
         case 'Delete': case 'Backspace': {
-          const { selectedTokenId } = useUIStore.getState()
-          if (selectedTokenId !== null) {
-            useTokenStore.getState().removeToken(selectedTokenId)
-            window.electronAPI?.dbRun('DELETE FROM tokens WHERE id = ?', [selectedTokenId])
-            useUIStore.getState().setSelectedToken(null)
+          const { selectedTokenIds } = useUIStore.getState()
+          if (selectedTokenIds.length > 0) {
+            const ids = [...selectedTokenIds]
+            for (const id of ids) {
+              useTokenStore.getState().removeToken(id)
+            }
+            window.electronAPI?.dbRun(
+              `DELETE FROM tokens WHERE id IN (${ids.map(() => '?').join(',')})`,
+              ids
+            )
+            useUIStore.getState().clearTokenSelection()
           }
           break
         }

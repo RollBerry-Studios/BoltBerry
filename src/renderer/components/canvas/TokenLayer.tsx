@@ -29,11 +29,15 @@ interface ContextMenu {
 
 export function TokenLayer({ map, stageRef }: TokenLayerProps) {
   const { tokens, moveToken, updateToken, removeToken } = useTokenStore()
-  const { activeTool, selectedTokenId, setSelectedToken } = useUIStore()
+  const { activeTool, selectedTokenId, selectedTokenIds, setSelectedToken, toggleTokenInSelection, setSelectedTokens, clearTokenSelection, gridSnap } = useUIStore()
   const { scale, offsetX, offsetY } = useMapTransformStore()
   const [contextMenu, setContextMenu] = useState<ContextMenu>({ visible: false, x: 0, y: 0, tokenId: -1 })
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
+  const [editingHpId, setEditingHpId] = useState<number | null>(null)
+  const [editHpCurrent, setEditHpCurrent] = useState('')
+  const [editHpMax, setEditHpMax] = useState('')
+  const [rubberBand, setRubberBand] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
 
   const isDraggable = activeTool === 'select'
   const sortedTokens = [...tokens].sort((a, b) => a.zIndex - b.zIndex)
@@ -41,25 +45,39 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
   async function handleDragEnd(token: TokenRecord, e: Konva.KonvaEventObject<DragEvent>) {
     const sx = e.target.x()
     const sy = e.target.y()
-    const mx = (sx - offsetX) / scale
-    const my = (sy - offsetY) / scale
+    const dx = sx - (token.x * scale + offsetX)
+    const dy = sy - (token.y * scale + offsetY)
+    const dmx = dx / scale
+    const dmy = dy / scale
 
-    // Snap to grid when grid is active
-    const snappedX = map.gridType !== 'none' ? Math.round(mx / map.gridSize) * map.gridSize : mx
-    const snappedY = map.gridType !== 'none' ? Math.round(my / map.gridSize) * map.gridSize : my
+    const shouldSnap = gridSnap && map.gridType !== 'none'
 
-    // Update visual position immediately for smooth snap
-    if (map.gridType !== 'none') {
+    const idsToMove = selectedTokenIds.includes(token.id) ? selectedTokenIds : [token.id]
+
+    for (const id of idsToMove) {
+      const t = tokens.find((tok) => tok.id === id)
+      if (!t) continue
+      let newX = t.x + dmx
+      let newY = t.y + dmy
+      if (shouldSnap) {
+        newX = Math.round(newX / map.gridSize) * map.gridSize
+        newY = Math.round(newY / map.gridSize) * map.gridSize
+      }
+      moveToken(id, newX, newY)
+      try {
+        await window.electronAPI?.dbRun('UPDATE tokens SET x = ?, y = ? WHERE id = ?', [newX, newY, id])
+      } catch (err) {
+        console.error('[TokenLayer] handleDragEnd failed:', err)
+      }
+    }
+
+    if (shouldSnap && idsToMove.length === 1) {
+      const snappedX = Math.round(((sx - offsetX) / scale) / map.gridSize) * map.gridSize
+      const snappedY = Math.round(((sy - offsetY) / scale) / map.gridSize) * map.gridSize
       e.target.position({ x: snappedX * scale + offsetX, y: snappedY * scale + offsetY })
     }
 
-    moveToken(token.id, snappedX, snappedY)
-    try {
-      await window.electronAPI?.dbRun('UPDATE tokens SET x = ?, y = ? WHERE id = ?', [snappedX, snappedY, token.id])
-      broadcastTokens(useTokenStore.getState().tokens)
-    } catch (err) {
-      console.error('[TokenLayer] handleDragEnd failed:', err)
-    }
+    broadcastTokens(useTokenStore.getState().tokens)
   }
 
   function handleContextMenu(token: TokenRecord, e: Konva.KonvaEventObject<MouseEvent>) {
@@ -67,12 +85,59 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     const stage = stageRef.current
     if (!stage) return
     const pos = stage.container().getBoundingClientRect()
+    if (!selectedTokenIds.includes(token.id)) {
+      setSelectedToken(token.id)
+    }
     setContextMenu({
       visible: true,
       x: e.evt.clientX - pos.left,
       y: e.evt.clientY - pos.top,
       tokenId: token.id,
     })
+  }
+
+  function handleLayerMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
+    if (activeTool !== 'select') return
+    if (e.target !== e.target.getStage()) return
+    const pos = e.target.getStage()?.getPointerPosition()
+    if (!pos) return
+    setRubberBand({ x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y })
+  }
+
+  function handleLayerMouseMove(e: Konva.KonvaEventObject<MouseEvent>) {
+    if (!rubberBand) return
+    const pos = e.target.getStage()?.getPointerPosition()
+    if (!pos) return
+    setRubberBand((rb) => rb ? { ...rb, x2: pos.x, y2: pos.y } : null)
+  }
+
+  function handleLayerMouseUp() {
+    if (!rubberBand) return
+    const { x1, y1, x2, y2 } = rubberBand
+    const left = Math.min(x1, x2)
+    const top = Math.min(y1, y2)
+    const right = Math.max(x1, x2)
+    const bottom = Math.max(y1, y2)
+
+    if (Math.abs(x2 - x1) > 5 || Math.abs(y2 - y1) > 5) {
+      const hitIds: number[] = []
+      for (const token of tokens) {
+        const sx = token.x * scale + offsetX
+        const sy = token.y * scale + offsetY
+        const sz = map.gridSize * token.size * scale
+        const cx = sx + sz / 2
+        const cy = sy + sz / 2
+        if (cx >= left && cx <= right && cy >= top && cy <= bottom) {
+          hitIds.push(token.id)
+        }
+      }
+      if (hitIds.length > 0) {
+        setSelectedTokens(hitIds)
+      } else {
+        clearTokenSelection()
+      }
+    }
+    setRubberBand(null)
   }
 
   function closeContextMenu() {
@@ -83,6 +148,26 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     setEditingId(token.id)
     setEditName(token.name)
     closeContextMenu()
+  }
+
+  function startEditHp(token: TokenRecord) {
+    setEditingHpId(token.id)
+    setEditHpCurrent(String(token.hpCurrent))
+    setEditHpMax(String(token.hpMax))
+    closeContextMenu()
+  }
+
+  async function commitEditHp(id: number) {
+    const hpCurrent = parseInt(editHpCurrent) || 0
+    const hpMax = parseInt(editHpMax) || 0
+    updateToken(id, { hpCurrent, hpMax })
+    try {
+      await window.electronAPI?.dbRun('UPDATE tokens SET hp_current = ?, hp_max = ? WHERE id = ?', [hpCurrent, hpMax, id])
+      broadcastTokens(useTokenStore.getState().tokens)
+    } catch (err) {
+      console.error('[TokenLayer] commitEditHp failed:', err)
+    }
+    setEditingHpId(null)
   }
 
   async function commitEdit(id: number) {
@@ -99,10 +184,16 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
 
   async function handleDelete(id: number) {
     closeContextMenu()
-    removeToken(id)
-    setSelectedToken(null)
+    const idsToDelete = selectedTokenIds.includes(id) ? selectedTokenIds : [id]
+    for (const did of idsToDelete) {
+      removeToken(did)
+    }
+    clearTokenSelection()
     try {
-      await window.electronAPI?.dbRun('DELETE FROM tokens WHERE id = ?', [id])
+      await window.electronAPI?.dbRun(
+        `DELETE FROM tokens WHERE id IN (${idsToDelete.map(() => '?').join(',')})`,
+        idsToDelete
+      )
       broadcastTokens(useTokenStore.getState().tokens)
     } catch (err) {
       console.error('[TokenLayer] handleDelete failed:', err)
@@ -160,7 +251,12 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
 
   return (
     <>
-      <Layer onClick={closeContextMenu}>
+      <Layer
+        onClick={closeContextMenu}
+        onMouseDown={handleLayerMouseDown}
+        onMouseMove={handleLayerMouseMove}
+        onMouseUp={handleLayerMouseUp}
+      >
         {sortedTokens.map((token) => {
           const sx = token.x * scale + offsetX
           const sy = token.y * scale + offsetY
@@ -174,18 +270,45 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
               y={sy}
               sizePx={sizePx}
               isDraggable={isDraggable && !token.locked}
-              isSelected={selectedTokenId === token.id}
+              isSelected={selectedTokenIds.includes(token.id)}
               isEditing={editingId === token.id}
               editName={editName}
+              isEditingHp={editingHpId === token.id}
+              editHpCurrent={editHpCurrent}
+              editHpMax={editHpMax}
               onEditNameChange={setEditName}
               onEditCommit={() => commitEdit(token.id)}
-              onSelect={() => setSelectedToken(token.id)}
+              onEditHpCurrentChange={setEditHpCurrent}
+              onEditHpMaxChange={setEditHpMax}
+              onEditHpCommit={() => commitEditHp(token.id)}
+              onSelect={(e?: Konva.KonvaEventObject<MouseEvent>) => {
+                if (e?.evt?.shiftKey) {
+                  toggleTokenInSelection(token.id)
+                } else if (!selectedTokenIds.includes(token.id)) {
+                  setSelectedToken(token.id)
+                }
+              }}
               onDblClick={() => startEdit(token)}
               onDragEnd={(e) => handleDragEnd(token, e)}
               onContextMenu={(e) => handleContextMenu(token, e)}
             />
           )
         })}
+
+        {/* Rubber-band selection rectangle */}
+        {rubberBand && (
+          <Rect
+            x={Math.min(rubberBand.x1, rubberBand.x2)}
+            y={Math.min(rubberBand.y1, rubberBand.y2)}
+            width={Math.abs(rubberBand.x2 - rubberBand.x1)}
+            height={Math.abs(rubberBand.y2 - rubberBand.y1)}
+            fill="rgba(47,107,255,0.08)"
+            stroke="rgba(47,107,255,0.5)"
+            strokeWidth={1}
+            dash={[4, 3]}
+            listening={false}
+          />
+        )}
 
         {/* Context Menu as HTML overlay */}
         {contextMenu.visible && (() => {
@@ -213,6 +336,7 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
               >
                 {[
                   { label: '✏️ Umbenennen', action: () => startEdit(token) },
+                  { label: '❤️ HP bearbeiten', action: () => startEditHp(token) },
                   { label: token.visibleToPlayers ? '🙈 Verstecken' : '👁 Sichtbar machen', action: () => handleToggleVisibility(token) },
                   { label: '📋 Duplizieren', action: () => handleDuplicate(token) },
                   null,
@@ -262,9 +386,15 @@ interface TokenNodeProps {
   isSelected: boolean
   isEditing: boolean
   editName: string
+  isEditingHp: boolean
+  editHpCurrent: string
+  editHpMax: string
   onEditNameChange: (v: string) => void
   onEditCommit: () => void
-  onSelect: () => void
+  onEditHpCurrentChange: (v: string) => void
+  onEditHpMaxChange: (v: string) => void
+  onEditHpCommit: () => void
+  onSelect: (e?: Konva.KonvaEventObject<MouseEvent>) => void
   onDblClick: () => void
   onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void
   onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => void
@@ -272,7 +402,9 @@ interface TokenNodeProps {
 
 const TokenNode = memo(function TokenNode({
   token, x, y, sizePx, isDraggable, isSelected,
-  isEditing, editName, onEditNameChange, onEditCommit,
+  isEditing, editName, isEditingHp, editHpCurrent, editHpMax,
+  onEditNameChange, onEditCommit,
+  onEditHpCurrentChange, onEditHpMaxChange, onEditHpCommit,
   onSelect, onDblClick, onDragEnd, onContextMenu,
 }: TokenNodeProps) {
   const image = useImage(token.imagePath ? `file://${token.imagePath}` : null)
@@ -411,6 +543,67 @@ const TokenNode = memo(function TokenNode({
               textAlign: 'center',
             }}
           />
+        </Html>
+      ) : isEditingHp ? (
+        <Html divProps={{ style: { position: 'absolute', top: 0, left: 0 } }}>
+          <div
+            style={{
+              position: 'absolute',
+              left: x - 50,
+              top: y + sizePx + 10,
+              display: 'flex',
+              gap: 4,
+              background: '#0D1015',
+              border: '1px solid #22c55e',
+              borderRadius: 4,
+              padding: '4px 6px',
+              zIndex: 100,
+            }}
+          >
+            <input
+              autoFocus
+              type="number"
+              value={editHpCurrent}
+              onChange={(e) => onEditHpCurrentChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onEditHpCommit()
+                if (e.key === 'Escape') onEditHpCommit()
+              }}
+              style={{
+                width: 36,
+                background: '#182130',
+                border: '1px solid #334155',
+                borderRadius: 3,
+                color: '#F4F6FA',
+                fontSize: 11,
+                padding: '1px 4px',
+                outline: 'none',
+                textAlign: 'center',
+              }}
+            />
+            <span style={{ color: '#64748b', fontSize: 11, lineHeight: '20px' }}>/</span>
+            <input
+              type="number"
+              value={editHpMax}
+              onChange={(e) => onEditHpMaxChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onEditHpCommit()
+                if (e.key === 'Escape') onEditHpCommit()
+              }}
+              onBlur={onEditHpCommit}
+              style={{
+                width: 36,
+                background: '#182130',
+                border: '1px solid #334155',
+                borderRadius: 3,
+                color: '#F4F6FA',
+                fontSize: 11,
+                padding: '1px 4px',
+                outline: 'none',
+                textAlign: 'center',
+              }}
+            />
+          </div>
         </Html>
       ) : (
         <Text

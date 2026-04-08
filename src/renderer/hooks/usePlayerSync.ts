@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useUIStore } from '../stores/uiStore'
 import { useTokenStore } from '../stores/tokenStore'
 import { useCampaignStore } from '../stores/campaignStore'
+import { useMapTransformStore } from '../stores/mapTransformStore'
 import type { PlayerFullState, PlayerTokenState } from '@shared/ipc-types'
 
 export function usePlayerSync() {
@@ -10,18 +11,14 @@ export function usePlayerSync() {
   useEffect(() => {
     if (!window.electronAPI) return
 
-    // Main process forwards 'player:request-sync' from the player window
-    // as 'dm:request-full-sync' to this DM renderer.
     const unsub = window.electronAPI.onRequestFullSync(async () => {
-      const { appMode, blackoutActive, atmosphereImagePath, sessionMode } = useUIStore.getState()
-      // In prep mode, don't sync — player sees whatever was last sent
+      const { appMode, blackoutActive, atmosphereImagePath, sessionMode, cameraFollowDM } = useUIStore.getState()
       if (sessionMode === 'prep') return
       const { activeMapId, activeMaps } = useCampaignStore.getState()
       const { tokens } = useTokenStore.getState()
 
       const activeMap = activeMaps.find((m) => m.id === activeMapId) ?? null
 
-      // Read fog bitmaps from DB (FogLayer saves them on a 2s debounce)
       let fogBitmap: string | null = null
       let exploredBitmap: string | null = null
       if (activeMapId) {
@@ -29,8 +26,7 @@ export function usePlayerSync() {
           fog_bitmap: string | null
           explored_bitmap: string | null
         }>(
-          'SELECT fog_bitmap, explored_bitmap FROM fog_state WHERE map_id = ?',
-          [activeMapId]
+          'SELECT fog_bitmap, explored_bitmap FROM fog_state WHERE map_id = ?', [activeMapId]
         )
         fogBitmap      = rows[0]?.fog_bitmap      ?? null
         exploredBitmap = rows[0]?.explored_bitmap ?? null
@@ -74,9 +70,20 @@ export function usePlayerSync() {
       }
 
       window.electronAPI?.sendFullSync(state)
+
+      if (cameraFollowDM && state.mode === 'map' && state.map) {
+        const { scale, offsetX, offsetY, fitScale, canvasW, canvasH } = useMapTransformStore.getState()
+        if (fitScale && canvasW && canvasH) {
+          const imageCenterX = (canvasW / 2 - offsetX) / scale
+          const imageCenterY = (canvasH / 2 - offsetY) / scale
+          const relZoom = scale / fitScale
+          window.electronAPI?.sendCameraView({ imageCenterX, imageCenterY, relZoom })
+        }
+      }
+
       setPlayerConnected(true)
     })
 
-    return () => unsub()
+    return () => { unsub() }
   }, [])
 }

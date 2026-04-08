@@ -86,6 +86,7 @@ export function createPlayerWindow(): BrowserWindow | null {
     },
   })
 
+  // ESC key exits fullscreen on player window
   if (isDev) {
     playerWindow.loadURL(`${RENDERER_URL}/player.html`)
   } else {

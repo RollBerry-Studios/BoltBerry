@@ -66,6 +66,15 @@ export function AudioPlayer() {
         </button>
       </div>
 
+      {loop && isPlaying && (
+        <div style={{
+          fontSize: 'var(--text-xs)', color: 'var(--accent-green, #22c55e)',
+          marginBottom: 'var(--sp-2)', display: 'flex', alignItems: 'center', gap: 4,
+        }}>
+          <span style={{ animation: 'pulse 2s infinite' }}>🔁</span> Looping
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
         <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flexShrink: 0 }}>
           {t('audio.volume')}

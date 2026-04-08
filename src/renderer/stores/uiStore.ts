@@ -20,8 +20,11 @@ interface UIState {
   language: AppLanguage
   atmosphereImagePath: string | null
   selectedTokenId: number | null
+  selectedTokenIds: number[]
+  cameraFollowDM: boolean
+  gridSnap: boolean
+  showMinimap: boolean
 
-  // Actions
   setActiveTool: (tool: ActiveTool) => void
   setSidebarTab: (tab: SidebarTab) => void
   toggleLeftSidebar: () => void
@@ -34,6 +37,12 @@ interface UIState {
   toggleLanguage: () => void
   setAtmosphereImage: (path: string | null) => void
   setSelectedToken: (id: number | null) => void
+  toggleTokenInSelection: (id: number) => void
+  setSelectedTokens: (ids: number[]) => void
+  clearTokenSelection: () => void
+  toggleCameraFollow: () => void
+  toggleGridSnap: () => void
+  toggleMinimap: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -49,6 +58,10 @@ export const useUIStore = create<UIState>((set) => ({
   language: (localStorage.getItem('boltberry-lang') as AppLanguage | null) ?? 'de',
   atmosphereImagePath: null,
   selectedTokenId: null,
+  selectedTokenIds: [],
+  cameraFollowDM: false,
+  gridSnap: true,
+  showMinimap: false,
 
   setActiveTool: (activeTool) => set({ activeTool }),
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
@@ -78,5 +91,17 @@ export const useUIStore = create<UIState>((set) => ({
     }),
   setAtmosphereImage: (atmosphereImagePath) =>
     set({ atmosphereImagePath, appMode: atmosphereImagePath ? 'atmosphere' : 'map' }),
-  setSelectedToken: (selectedTokenId) => set({ selectedTokenId }),
+  setSelectedToken: (selectedTokenId) => set({ selectedTokenId, selectedTokenIds: selectedTokenId ? [selectedTokenId] : [] }),
+  toggleTokenInSelection: (id) =>
+    set((s) => {
+      const ids = s.selectedTokenIds.includes(id)
+        ? s.selectedTokenIds.filter((i) => i !== id)
+        : [...s.selectedTokenIds, id]
+      return { selectedTokenIds: ids, selectedTokenId: ids.length === 1 ? ids[0] : ids.length > 1 ? ids[0] : null }
+    }),
+  setSelectedTokens: (ids) => set({ selectedTokenIds: ids, selectedTokenId: ids[0] ?? null }),
+  clearTokenSelection: () => set({ selectedTokenIds: [], selectedTokenId: null }),
+  toggleCameraFollow: () => set((s) => ({ cameraFollowDM: !s.cameraFollowDM })),
+  toggleGridSnap: () => set((s) => ({ gridSnap: !s.gridSnap })),
+  toggleMinimap: () => set((s) => ({ showMinimap: !s.showMinimap })),
 }))

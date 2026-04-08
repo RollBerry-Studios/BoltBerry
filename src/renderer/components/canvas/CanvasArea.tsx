@@ -5,10 +5,12 @@ import { FogLayer } from './FogLayer'
 import { TokenLayer } from './TokenLayer'
 import { PointerLayer } from './PointerLayer'
 import { MeasureLayer } from './MeasureLayer'
+import { MinimapOverlay } from './MinimapOverlay'
 import { useUIStore } from '../../stores/uiStore'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useTokenStore } from '../../stores/tokenStore'
 import { useInitiativeStore } from '../../stores/initiativeStore'
+import { useMapTransformStore } from '../../stores/mapTransformStore'
 import { useImageUrl } from '../../hooks/useImageUrl'
 import type Konva from 'konva'
 import type { MapRecord } from '@shared/ipc-types'
@@ -18,10 +20,26 @@ export function CanvasArea() {
   const stageRef = useRef<Konva.Stage>(null)
   const [size, setSize] = useState({ width: 800, height: 600 })
 
-  const { activeTool, blackoutActive, appMode, atmosphereImagePath } = useUIStore()
+  const { activeTool, blackoutActive, appMode, atmosphereImagePath, showMinimap } = useUIStore()
   const { activeMapId, activeMaps } = useCampaignStore()
   const activeMap = activeMaps.find((m) => m.id === activeMapId) ?? null
   const atmosphereUrl = useImageUrl(atmosphereImagePath)
+
+  // Continuous camera sync to player when follow mode is on
+  useEffect(() => {
+    const unsub = useMapTransformStore.subscribe((state, prevState) => {
+      if (!useUIStore.getState().cameraFollowDM) return
+      if (state.scale !== prevState.scale || state.offsetX !== prevState.offsetX || state.offsetY !== prevState.offsetY) {
+        const { scale, offsetX, offsetY, fitScale, canvasW, canvasH, imgW, imgH } = state
+        if (!fitScale || !canvasW || !canvasH || !imgW || !imgH) return
+        const imageCenterX = (canvasW / 2 - offsetX) / scale
+        const imageCenterY = (canvasH / 2 - offsetY) / scale
+        const relZoom = scale / fitScale
+        window.electronAPI?.sendCameraView({ imageCenterX, imageCenterY, relZoom })
+      }
+    })
+    return () => unsub()
+  }, [])
 
   // Resize observer
   useEffect(() => {
@@ -108,7 +126,7 @@ export function CanvasArea() {
         </Stage>
       )}
 
-      {/* Blackout overlay */}
+       {/* Blackout overlay */}
       {blackoutActive && (
         <div
           className="blackout-overlay"
@@ -116,6 +134,11 @@ export function CanvasArea() {
           onClick={() => useUIStore.getState().toggleBlackout()}
           title="Klicken zum Aufheben"
         />
+      )}
+
+      {/* Minimap overlay */}
+      {showMinimap && activeMap && (
+        <MinimapOverlay stageRef={stageRef} canvasSize={size} />
       )}
     </div>
   )

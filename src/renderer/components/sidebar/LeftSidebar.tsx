@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useMapTransformStore } from '../../stores/mapTransformStore'
 import { AssetBrowser } from './panels/AssetBrowser'
 import { SettingsPanel } from './panels/SettingsPanel'
+import { useImageUrl } from '../../hooks/useImageUrl'
 import type { MapRecord } from '@shared/ipc-types'
 
 export function LeftSidebar() {
@@ -204,6 +205,30 @@ export function LeftSidebar() {
     }
   }
 
+  async function handleReorderMap(mapId: number, direction: 'up' | 'down') {
+    if (!window.electronAPI) return
+    const idx = activeMaps.findIndex((m) => m.id === mapId)
+    if (idx < 0) return
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= activeMaps.length) return
+
+    const mapA = activeMaps[idx]
+    const mapB = activeMaps[swapIdx]
+    try {
+      await window.electronAPI.dbRun('UPDATE maps SET order_index = ? WHERE id = ?', [mapB.orderIndex, mapA.id])
+      await window.electronAPI.dbRun('UPDATE maps SET order_index = ? WHERE id = ?', [mapA.orderIndex, mapB.id])
+      useCampaignStore.getState().setActiveMaps(
+        activeMaps.map((m) => {
+          if (m.id === mapA.id) return { ...m, orderIndex: mapB.orderIndex }
+          if (m.id === mapB.id) return { ...m, orderIndex: mapA.orderIndex }
+          return m
+        })
+      )
+    } catch (err) {
+      console.error('[LeftSidebar] handleReorderMap failed:', err)
+    }
+  }
+
   return (
     <div className="sidebar sidebar-left">
       {/* ── Tab bar ──────────────────────────────────────────────────────── */}
@@ -246,54 +271,15 @@ export function LeftSidebar() {
         )}
 
         {activeMaps.map((map, i) => (
-          <div
+          <MapListItem
             key={map.id}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 'var(--sp-2)',
-              width: '100%', padding: 'var(--sp-2)',
-              background: activeMapId === map.id ? 'var(--accent-blue-dim)' : 'none',
-              border: activeMapId === map.id ? '1px solid var(--accent-blue)' : '1px solid transparent',
-              borderRadius: 'var(--radius)',
-              color: activeMapId === map.id ? 'var(--accent-blue-light)' : 'var(--text-secondary)',
-              cursor: 'pointer', textAlign: 'left', fontSize: 'var(--text-sm)',
-              marginBottom: 'var(--sp-1)', transition: 'background var(--transition)',
-            }}
-            onClick={() => setActiveMap(map.id)}
-            onContextMenu={async (e) => {
-              e.preventDefault()
-              if (!window.electronAPI) return
-
-              const selectedAction = await window.electronAPI.showContextMenu([
-                { label: 'Umbenennen', action: 'rename' },
-                { label: 'Löschen', action: 'delete', danger: true },
-              ])
-
-              if (selectedAction === 'rename') {
-                const newName = prompt('Neuer Name:', map.name)
-                if (newName && newName.trim()) {
-                  await window.electronAPI.dbRun(
-                    'UPDATE maps SET name = ? WHERE id = ?',
-                    [newName.trim(), map.id]
-                  )
-                  useCampaignStore.getState().refreshCampaigns()
-                }
-              } else if (selectedAction === 'delete') {
-                const confirmed = await window.electronAPI.deleteMapConfirm(map.name)
-                if (confirmed) {
-                  await window.electronAPI.dbRun(
-                    'DELETE FROM maps WHERE id = ?',
-                    [map.id]
-                  )
-                  useCampaignStore.getState().refreshCampaigns()
-                }
-              }
-            }}
-          >
-            <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', minWidth: 16 }}>{i + 1}</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-              {map.name}
-            </span>
-          </div>
+            map={map}
+            index={i}
+            total={activeMaps.length}
+            isActive={activeMapId === map.id}
+            onSelect={() => setActiveMap(map.id)}
+            onReorder={handleReorderMap}
+          />
         ))}
 
         {addingMap ? (
@@ -464,4 +450,88 @@ async function renderPdfToImage(
     campaignId,
   })
   return result.path
+}
+
+function MapListItem({ map, index, total, isActive, onSelect, onReorder }: {
+  map: MapRecord
+  index: number
+  total: number
+  isActive: boolean
+  onSelect: () => void
+  onReorder: (id: number, direction: 'up' | 'down') => void
+}) {
+  const thumbnailUrl = useImageUrl(map.imagePath)
+
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 'var(--sp-2)',
+        width: '100%', padding: 'var(--sp-2)',
+        background: isActive ? 'var(--accent-blue-dim)' : 'none',
+        border: isActive ? '1px solid var(--accent-blue)' : '1px solid transparent',
+        borderRadius: 'var(--radius)',
+        color: isActive ? 'var(--accent-blue-light)' : 'var(--text-secondary)',
+        cursor: 'pointer', textAlign: 'left', fontSize: 'var(--text-sm)',
+        marginBottom: 'var(--sp-1)', transition: 'background var(--transition)',
+      }}
+      onClick={onSelect}
+      onContextMenu={async (e) => {
+        e.preventDefault()
+        if (!window.electronAPI) return
+
+        const selectedAction = await window.electronAPI.showContextMenu([
+          { label: 'Umbenennen', action: 'rename' },
+          { label: 'Löschen', action: 'delete', danger: true },
+        ])
+
+        if (selectedAction === 'rename') {
+          const newName = prompt('Neuer Name:', map.name)
+          if (newName && newName.trim()) {
+            await window.electronAPI.dbRun(
+              'UPDATE maps SET name = ? WHERE id = ?',
+              [newName.trim(), map.id]
+            )
+            useCampaignStore.getState().refreshCampaigns()
+          }
+        } else if (selectedAction === 'delete') {
+          const confirmed = await window.electronAPI.deleteMapConfirm(map.name)
+          if (confirmed) {
+            await window.electronAPI.dbRun(
+              'DELETE FROM maps WHERE id = ?',
+              [map.id]
+            )
+            useCampaignStore.getState().refreshCampaigns()
+          }
+        }
+      }}
+    >
+      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', minWidth: 16 }}>{index + 1}</span>
+      {thumbnailUrl && (
+        <img
+          src={thumbnailUrl}
+          alt=""
+          style={{ width: 32, height: 24, objectFit: 'cover', borderRadius: 3, flexShrink: 0, border: '1px solid var(--border)' }}
+        />
+      )}
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+        {map.name}
+      </span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
+        <button
+          className="btn btn-ghost"
+          style={{ padding: '0 4px', fontSize: 10, lineHeight: '14px', minHeight: 14 }}
+          disabled={index === 0}
+          onClick={(e) => { e.stopPropagation(); onReorder(map.id, 'up') }}
+          title="Move up"
+        >▲</button>
+        <button
+          className="btn btn-ghost"
+          style={{ padding: '0 4px', fontSize: 10, lineHeight: '14px', minHeight: 14 }}
+          disabled={index === total - 1}
+          onClick={(e) => { e.stopPropagation(); onReorder(map.id, 'down') }}
+          title="Move down"
+        >▼</button>
+      </div>
+    </div>
+  )
 }

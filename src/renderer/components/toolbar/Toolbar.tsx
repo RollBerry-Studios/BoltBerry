@@ -127,10 +127,14 @@ export function Toolbar() {
     toggleLeftSidebar, toggleRightSidebar,
     sessionMode, setSessionMode,
     toggleLanguage, language,
+    cameraFollowDM, toggleCameraFollow,
+    gridSnap, toggleGridSnap,
+    showMinimap, toggleMinimap,
   } = useUIStore()
   const { activeCampaignId } = useCampaignStore()
   const [showMonitorDialog, setShowMonitorDialog] = useState(false)
   const [cameraSent, setCameraSent] = useState(false)
+  const zoomPercent = Math.round(useMapTransformStore((s) => s.scale / s.fitScale * 100))
 
   async function handleAtmosphere() {
     if (!window.electronAPI) return
@@ -205,6 +209,7 @@ export function Toolbar() {
 
       <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
+      {/* Session mode */}
       <button
         className={clsx('tool-btn', sessionMode === 'prep' && 'active')}
         title={sessionMode === 'session' ? t('toolbar.sessionModeHint') : t('toolbar.prepModeHint')}
@@ -214,8 +219,19 @@ export function Toolbar() {
         {sessionMode === 'session' ? '▶' : '✎'}
       </button>
 
+      {/* Camera follow toggle */}
+      <button
+        className={clsx('tool-btn', cameraFollowDM && 'active')}
+        title={cameraFollowDM ? 'Kamera-Folgemodus AN (DM-Ansicht wird kontinuierlich an Spieler gesendet)' : 'Kamera-Folgemodus AUS (Einmalig senden)'}
+        onClick={toggleCameraFollow}
+        style={cameraFollowDM ? { color: 'var(--success)' } : undefined}
+      >
+        📡
+      </button>
+
       <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
+      {/* Blackout */}
       <button
         className={clsx('tool-btn', blackoutActive && 'active')}
         title={t('toolbar.blackout')}
@@ -225,6 +241,7 @@ export function Toolbar() {
         ⬛
       </button>
 
+      {/* Single camera send */}
       <button
         className={clsx('tool-btn', cameraSent && 'active')}
         title={t('toolbar.shareCamera')}
@@ -235,22 +252,42 @@ export function Toolbar() {
       </button>
 
       <button className="tool-btn" title={t('toolbar.openPlayerWindow')} onClick={() => setShowMonitorDialog(true)}>🖥</button>
-
-      <button
-        className="tool-btn"
-        title="Playerfenster schließen"
-        onClick={() => window.electronAPI?.closePlayerWindow()}
-      >
-        ✕🖥
-      </button>
+      <button className="tool-btn" title="Playerfenster schließen" onClick={() => window.electronAPI?.closePlayerWindow()}>✕🖥</button>
 
       <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
-      <button className="tool-btn" title="Vergrößern" onClick={() => useMapTransformStore.getState().zoomIn()}>🔍+</button>
-      <button className="tool-btn" title="Verkleinern" onClick={() => useMapTransformStore.getState().zoomOut()}>🔍−</button>
-      <button className="tool-btn" title="Ansicht anpassen" onClick={() => useMapTransformStore.getState().fitToScreen()}>⊡</button>
+      {/* Zoom controls + percentage */}
+      <button className="tool-btn" title="Vergrößern (+)" onClick={() => useMapTransformStore.getState().zoomIn()}>🔍+</button>
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', minWidth: 36, textAlign: 'center', lineHeight: '32px', fontFamily: 'monospace' }}>
+        {zoomPercent}%
+      </div>
+      <button className="tool-btn" title="Verkleinern (-)" onClick={() => useMapTransformStore.getState().zoomOut()}>🔍−</button>
+      <button className="tool-btn" title="Ansicht anpassen (0)" onClick={() => useMapTransformStore.getState().fitToScreen()}>⊡</button>
+      <button className={clsx('tool-btn', showMinimap && 'active')} title="Minimap" onClick={toggleMinimap}>🗺</button>
+
+      <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
+
+      {/* Grid snap toggle */}
+      <button
+        className={clsx('tool-btn', gridSnap && 'active')}
+        title={gridSnap ? 'Raster-Snapp AN' : 'Raster-Snapp AUS'}
+        onClick={toggleGridSnap}
+      >
+        ⊞
+      </button>
 
       <div style={{ flex: 1 }} />
+
+      {/* Session mode indicator */}
+      {sessionMode === 'prep' && (
+        <div style={{
+          padding: '2px 8px', borderRadius: 'var(--radius)', fontSize: 'var(--text-xs)', fontWeight: 600,
+          background: 'rgba(245, 158, 0, 0.15)', color: 'var(--warning)', border: '1px solid rgba(245, 158, 0, 0.3)',
+          marginRight: 4,
+        }}>
+          PREP
+        </div>
+      )}
 
       {activeCampaignId && (
         <img
@@ -273,7 +310,6 @@ export function Toolbar() {
         ?
       </button>
 
-      {/* Language toggle */}
       <button
         className="tool-btn"
         title={t('toolbar.switchLanguage')}

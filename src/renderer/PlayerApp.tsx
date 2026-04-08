@@ -36,6 +36,16 @@ export default function PlayerApp() {
   }, [])
 
   useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        document.exitFullscreen?.().catch(() => {})
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
     if (!window.playerAPI) return
 
     const unsubs = [

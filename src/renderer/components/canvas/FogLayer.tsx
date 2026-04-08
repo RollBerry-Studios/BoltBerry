@@ -136,8 +136,10 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool }: FogLayerPr
         undo()
         rebuildFog()
       } else {
+        const fogStore = useFogStore.getState()
+        if (fogStore.history.length === 0) return
         redo()
-        applyOp(useFogStore.getState().history.at(-1)!)
+        applyOp(fogStore.history.at(-1)!)
       }
     }
     el?.addEventListener('fog:undo-redo', handler)

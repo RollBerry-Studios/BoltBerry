@@ -210,4 +210,5 @@ export interface PlayerDrawingState {
   points: number[]
   color: string
   width: number
+  text?: string
 }

@@ -49,7 +49,7 @@ export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
         [mapId, mx, my, '', '📌', '#f59e0b']
       )
       if (result) {
-        setPins([...pins, { id: result.lastInsertRowid, x: mx, y: my, label: '', icon: '📌', color: '#f59e0b' }])
+        setPins(prev => [...prev, { id: result.lastInsertRowid, x: mx, y: my, label: '', icon: '📌', color: '#f59e0b' }])
       }
     } catch (err) {
       console.error('[GMPinLayer] add pin failed:', err)
@@ -59,7 +59,7 @@ export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
   async function handleDeletePin(id: number) {
     try {
       await window.electronAPI?.dbRun('DELETE FROM gm_pins WHERE id = ?', [id])
-      setPins(pins.filter((p) => p.id !== id))
+      setPins(prev => prev.filter((p) => p.id !== id))
     } catch (err) {
       console.error('[GMPinLayer] delete pin failed:', err)
     }
@@ -68,7 +68,7 @@ export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
   async function handleUpdateLabel(id: number, label: string) {
     try {
       await window.electronAPI?.dbRun('UPDATE gm_pins SET label = ? WHERE id = ?', [label, id])
-      setPins(pins.map((p) => (p.id === id ? { ...p, label } : p)))
+      setPins(prev => prev.map((p) => (p.id === id ? { ...p, label } : p)))
     } catch (err) {
       console.error('[GMPinLayer] update label failed:', err)
     }
@@ -86,7 +86,7 @@ export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
               const mx = (e.target.x() - offsetX) / scale
               const my = (e.target.y() - offsetY) / scale
               e.target.position({ x: sx, y: sy })
-              setPins(pins.map((p) => (p.id === pin.id ? { ...p, x: mx, y: my } : p)))
+              setPins(prev => prev.map((p) => (p.id === pin.id ? { ...p, x: mx, y: my } : p)))
               try {
                 await window.electronAPI?.dbRun('UPDATE gm_pins SET x = ?, y = ? WHERE id = ?', [mx, my, pin.id])
               } catch (err) {
@@ -100,11 +100,11 @@ export function GMPinLayer({ stageRef, mapId, gridSize }: GMPinLayerProps) {
           >
             <Circle x={0} y={0} radius={14} fill={pin.color} opacity={0.85} listening={false} />
             <Text x={-7} y={-9} text={pin.icon} fontSize={14} listening={false} />
-            {pin.label && !editingPinId && (
+            {pin.label && editingPinId !== pin.id && (
               <Rect x={-pin.label.length * 3} y={16} width={pin.label.length * 6 + 8} height={16}
                 fill="rgba(13,16,21,0.85)" cornerRadius={3} listening={false} />
             )}
-            {pin.label && !editingPinId && (
+            {pin.label && editingPinId !== pin.id && (
               <Text x={-pin.label.length * 3 + 4} y={18} text={pin.label} fontSize={10}
                 fill="#F4F6FA" listening={false} />
             )}

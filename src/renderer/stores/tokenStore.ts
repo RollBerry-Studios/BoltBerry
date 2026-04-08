@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { TokenRecord } from '@shared/ipc-types'
+import { useUIStore } from './uiStore'
 
 interface TokenState {
   tokens: TokenRecord[]
@@ -56,15 +57,43 @@ export const useTokenStore = create<TokenState>()(
         }
       }),
 
-    undoLastMove: () =>
+    undoLastMove: () => {
+      const snapshot = useTokenStore.getState().positionHistory
+      if (snapshot.length === 0) return
+      const prev = snapshot[snapshot.length - 1]
       set((s) => {
-        const prev = s.positionHistory[s.positionHistory.length - 1]
-        if (!prev) return
         s.positionHistory = s.positionHistory.slice(0, -1)
         prev.forEach(({ id, x, y }) => {
           const t = s.tokens.find((t) => t.id === id)
           if (t) { t.x = x; t.y = y }
         })
-      }),
+      })
+      prev.forEach(({ id, x, y }) => {
+        window.electronAPI?.dbRun('UPDATE tokens SET x = ?, y = ? WHERE id = ?', [x, y, id])
+      })
+      broadcastTokens(useTokenStore.getState().tokens)
+    },
   }))
 )
+
+function broadcastTokens(tokens: TokenRecord[]) {
+  if (useUIStore.getState().sessionMode === 'prep') return
+  const visible = tokens
+    .filter((t) => t.visibleToPlayers)
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      imagePath: t.imagePath,
+      x: t.x,
+      y: t.y,
+      size: t.size,
+      hpCurrent: t.hpCurrent,
+      hpMax: t.hpMax,
+      showName: true,
+      rotation: t.rotation,
+      markerColor: t.markerColor,
+      statusEffects: t.statusEffects,
+      ac: t.ac,
+    }))
+  window.electronAPI?.sendTokenUpdate(visible)
+}

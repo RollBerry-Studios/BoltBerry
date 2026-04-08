@@ -1,5 +1,5 @@
 import { ipcMain, dialog, app, Menu, BrowserWindow } from 'electron'
-import { join, extname, relative } from 'path'
+import { join, extname, relative, resolve, isAbsolute, sep } from 'path'
 import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync, readFileSync, unlinkSync } from 'fs'
 import { IPC } from '../../shared/ipc-types'
 import {
@@ -8,7 +8,7 @@ import {
   getAvailableDisplays,
   setPlayerDisplayId,
 } from '../windows'
-import { getDb, getCustomUserDataPath } from '../db/database'
+import { getDb, getCustomUserDataPath, setCustomUserDataPath, closeDatabase, initDatabase } from '../db/database'
 
 const ASSET_EXTENSIONS = {
   map: ['.png', '.jpg', '.jpeg', '.webp'],
@@ -62,16 +62,13 @@ export function registerAppHandlers(): void {
 
   // Set custom user data folder
   ipcMain.handle('SET_USER_DATA_FOLDER', (_event, path: string) => {
-    const { setCustomUserDataPath, initDatabase } = require('../db/database')
     setCustomUserDataPath(path)
-    
-    // Reinitialize database with new path
     try {
+      closeDatabase()
       initDatabase()
     } catch (err) {
       console.error('[AppHandlers] Failed to reinitialize database:', err)
     }
-    
     return true
   })
 
@@ -89,33 +86,22 @@ export function registerAppHandlers(): void {
 
   // Get image as base64 for direct embedding
   ipcMain.handle('GET_IMAGE_AS_BASE64', async (_event, imagePath: string) => {
-    const { getCustomUserDataPath } = require('../db/database')
-    const { join, isAbsolute } = require('path')
-    const { promises: { readFile } } = require('fs')
-    
     try {
-      // Remove file:// prefix if present
       let cleanPath = imagePath
       if (imagePath.startsWith('file://')) {
         cleanPath = imagePath.substring(7)
       }
-      
-      let fullPath: string
-      if (isAbsolute(cleanPath)) {
-        // Already absolute path
-        fullPath = cleanPath
-      } else {
-        // Relative path from user data folder
-        const userDataPath = getCustomUserDataPath() || app.getPath('userData')
-        fullPath = join(userDataPath, cleanPath)
+      const userDataPath = resolve(getCustomUserDataPath() || app.getPath('userData'))
+      const fullPath = resolve(userDataPath, cleanPath)
+      if (!fullPath.startsWith(userDataPath + sep) && fullPath !== userDataPath) {
+        return null
       }
-      
+      const { readFile } = require('fs/promises')
       const imageBuffer = await readFile(fullPath)
       const base64 = imageBuffer.toString('base64')
       const extension = fullPath.toLowerCase().split('.').pop() || 'png'
       const mimeType = extension === 'jpg' || extension === 'jpeg' ? 'image/jpeg' : 
                      extension === 'webp' ? 'image/webp' : 'image/png'
-      
       return `data:${mimeType};base64,${base64}`
     } catch (err) {
       return null

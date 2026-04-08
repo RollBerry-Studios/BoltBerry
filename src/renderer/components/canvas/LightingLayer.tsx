@@ -30,7 +30,10 @@ export function LightingLayer({ stageRef, mapId, gridSize }: LightingLayerProps)
         const match = token.notes?.match(/light:(\d+)(?::(#\w+))?/)
         if (!match) return null
         const lightRadius = parseInt(match[1]) || 0
-        const lightColor = match[2] || '#ffcc44'
+        const rawColor = match[2] || '#ffcc44'
+        const lightColor = rawColor.length === 4
+          ? '#' + rawColor[1] + rawColor[1] + rawColor[2] + rawColor[2] + rawColor[3] + rawColor[3]
+          : rawColor
         if (lightRadius <= 0) return null
 
         const sx = token.x * scale + offsetX

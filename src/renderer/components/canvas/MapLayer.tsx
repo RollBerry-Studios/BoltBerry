@@ -3,7 +3,6 @@ import { Layer, Image as KonvaImage, Shape } from 'react-konva'
 import Konva from 'konva'
 import type { MapRecord } from '@shared/ipc-types'
 import { useMapTransformStore } from '../../stores/mapTransformStore'
-import { useUIStore } from '../../stores/uiStore'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useRotatedImage } from '../../hooks/useRotatedImage'
 
@@ -18,19 +17,28 @@ const MAX_SCALE = 12
 
 export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
   const { scale, offsetX, offsetY, setTransform, reset } = useMapTransformStore()
-  const { activeTool } = useUIStore()
   const resolvedImagePath = map.imagePath
   const { img: image, imgW: natW, imgH: natH } = useRotatedImage(resolvedImagePath, map.rotation ?? 0)
   const isPanning = useRef(false)
   const lastPointer = useRef({ x: 0, y: 0 })
   const spaceHeld = useRef(false)
   const cameraInitializedRef = useRef(false)
+  const lastMapIdRef = useRef(map.id)
+
+  // Reset camera init flag when map changes
+  useEffect(() => {
+    if (map.id !== lastMapIdRef.current) {
+      cameraInitializedRef.current = false
+      lastMapIdRef.current = map.id
+    }
+  }, [map.id])
   const cameraSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Track spacebar for alternate pan
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' && !e.repeat) {
+        if (e.target instanceof HTMLElement && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return
         spaceHeld.current = true
         const el = document.getElementById('root')
         if (el) el.style.cursor = 'grab'
@@ -118,10 +126,7 @@ export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
     const isMiddle = e.evt.button === 1
     const isAltLeft = e.evt.button === 0 && e.evt.altKey
     const isSpacePan = e.evt.button === 0 && spaceHeld.current
-    const isSelectPan = e.evt.button === 0 && activeTool === 'select' && !spaceHeld.current
-    // Only start select-tool panning when clicking on empty canvas (stage background)
-    if (isSelectPan && e.target !== e.target.getStage()) return
-    if (!isMiddle && !isAltLeft && !isSelectPan && !isSpacePan) return
+    if (!isMiddle && !isAltLeft && !isSpacePan) return
     e.evt.preventDefault()
     isPanning.current = true
     lastPointer.current = { x: e.evt.clientX, y: e.evt.clientY }

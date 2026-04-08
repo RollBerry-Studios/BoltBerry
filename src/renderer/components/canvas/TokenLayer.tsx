@@ -136,6 +136,8 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
       } else {
         clearTokenSelection()
       }
+    } else {
+      clearTokenSelection()
     }
     setRubberBand(null)
   }

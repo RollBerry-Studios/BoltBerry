@@ -529,6 +529,17 @@ function MapListItem({ map, index, total, isActive, onSelect, onReorder }: {
             if (map.id === useCampaignStore.getState().activeMapId) {
               useTokenStore.getState().setTokens([])
               useInitiativeStore.getState().setEntries([])
+              useUIStore.getState().setPlayerConnected(false)
+              window.electronAPI?.sendFullSync({
+                mode: 'map',
+                map: null,
+                tokens: [],
+                fogBitmap: null,
+                exploredBitmap: null,
+                atmosphereImagePath: null,
+                blackout: false,
+                drawings: [],
+              })
             }
           }
         }

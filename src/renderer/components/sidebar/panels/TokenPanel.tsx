@@ -96,6 +96,7 @@ export function TokenPanel() {
       }
       addToken(token)
       setSelectedToken(token.id)
+      broadcastTokensFromPanel()
     } catch (err) {
       console.error('[TokenPanel] handleAddToken failed:', err)
     }

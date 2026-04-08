@@ -12,6 +12,7 @@ interface Drawing {
   points: number[]
   color: string
   width: number
+  text?: string
 }
 
 interface DrawingLayerProps {
@@ -96,7 +97,7 @@ export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
         [mapId, d.type, pointsStr, d.color, d.width]
       )
       const newDrawing: Drawing = { id: result.lastInsertRowid, type: d.type, points: d.points, color: d.color, width: d.width }
-      setDrawings([...drawings, newDrawing])
+      setDrawings(prev => [...prev, newDrawing])
       window.electronAPI?.sendDrawing(newDrawing)
     } catch (err) {
       console.error('[DrawingLayer] addDrawing failed:', err)
@@ -125,6 +126,12 @@ export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
       const radius = Math.sqrt(dx * dx + dy * dy) * scale
       return <Circle key={d.id} x={cx} y={cy} radius={radius}
         stroke={d.color} strokeWidth={d.width * scale} listening={false} />
+    }
+    if (d.type === 'text' && d.points.length >= 2) {
+      const tx = d.points[0] * scale + offsetX
+      const ty = d.points[1] * scale + offsetY
+      return <KonvaText key={d.id} x={tx} y={ty} text={d.text ?? ''}
+        fontSize={14 * scale} fill={d.color} listening={false} />
     }
     return null
   }
@@ -173,9 +180,9 @@ async function loadDrawings(mapId: number): Promise<Drawing[]> {
   if (!window.electronAPI) return []
   try {
     const rows = await window.electronAPI.dbQuery<{
-      id: number; type: string; points: string; color: string; width: number
-    }>('SELECT id, type, points, color, width FROM drawings WHERE map_id = ?', [mapId])
-    return rows.map((r) => ({ id: r.id, type: r.type as DrawingType, points: JSON.parse(r.points), color: r.color, width: r.width }))
+      id: number; type: string; points: string; color: string; width: number; text: string | null
+    }>('SELECT id, type, points, color, width, text FROM drawings WHERE map_id = ?', [mapId])
+    return rows.map((r) => ({ id: r.id, type: r.type as DrawingType, points: JSON.parse(r.points), color: r.color, width: r.width, text: r.text ?? undefined }))
   } catch (err) {
     console.error('[DrawingLayer] loadDrawings failed:', err)
     return []

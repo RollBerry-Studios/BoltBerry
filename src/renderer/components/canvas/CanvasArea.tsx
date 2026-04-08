@@ -171,7 +171,7 @@ export function CanvasArea() {
 
 function getCursor(tool: string): string {
   switch (tool) {
-    case 'select':       return 'grab'
+    case 'select':       return 'default'
     case 'fog-rect':      return 'crosshair'
     case 'fog-polygon':   return 'crosshair'
     case 'fog-cover':     return 'crosshair'

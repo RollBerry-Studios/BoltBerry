@@ -1,5 +1,5 @@
 import { ipcMain, dialog, app } from 'electron'
-import { join, basename, extname } from 'path'
+import path from 'path'
 import {
   existsSync, mkdirSync, createWriteStream,
   createReadStream, copyFileSync, readdirSync, readFileSync,
@@ -66,9 +66,9 @@ export function registerExportImportHandlers(): void {
     const stamp = ts.getTime()
     const filename = `BoltBerry_${safeName}_${isoDate}_${stamp}.zip`
 
-    const backupDir = join(app.getPath('documents'), 'BoltBerry-Backups')
+    const backupDir = path.join(app.getPath('documents'), 'BoltBerry-Backups')
     mkdirSync(backupDir, { recursive: true })
-    const filePath = join(backupDir, filename)
+    const filePath = path.join(backupDir, filename)
 
     const result = await buildZip(campaignId, db, filePath)
     return { ...result, filePath }
@@ -85,7 +85,7 @@ export function registerExportImportHandlers(): void {
 
     const zipPath = filePaths[0]
     const userData = app.getPath('userData')
-    const importDir = join(userData, 'imports', `import_${Date.now()}`)
+    const importDir = path.join(userData, 'imports', `import_${Date.now()}`)
     mkdirSync(importDir, { recursive: true })
 
     await new Promise<void>((resolve, reject) => {
@@ -95,7 +95,7 @@ export function registerExportImportHandlers(): void {
         .on('error', reject)
     })
 
-    const campaignJsonPath = join(importDir, 'campaign.json')
+    const campaignJsonPath = path.join(importDir, 'campaign.json')
     if (!existsSync(campaignJsonPath)) {
       return { success: false, error: 'Ungültige Kampagnen-Datei (campaign.json fehlt)' }
     }
@@ -104,20 +104,29 @@ export function registerExportImportHandlers(): void {
       readFileSync(campaignJsonPath, 'utf-8')
     ) as CampaignExport
 
-    const assetsDir = join(importDir, 'assets')
-    const destAssetsDir = join(userData, 'assets', 'imported')
+    const assetsDir = path.join(importDir, 'assets')
+    const destAssetsDir = path.join(userData, 'assets', 'imported')
     mkdirSync(destAssetsDir, { recursive: true })
 
     const pathMap = new Map<string, string>()
 
     if (existsSync(assetsDir)) {
-      for (const file of readdirSync(assetsDir)) {
-        const src = join(assetsDir, file)
-        const destName = `${Date.now()}_${Math.random().toString(36).slice(2)}${extname(file)}`
-        const dest = join(destAssetsDir, destName)
-        copyFileSync(src, dest)
-        pathMap.set(`assets/${file}`, dest)
+      const importAssetsDir = path.join(importDir, 'assets')
+      const walkDir = (dir: string, prefix: string) => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const srcPath = path.join(dir, entry.name)
+          const entryKey = prefix ? `${prefix}/${entry.name}` : entry.name
+          if (entry.isDirectory()) {
+            walkDir(srcPath, entryKey)
+          } else {
+            const destName = `${Date.now()}_${Math.random().toString(36).slice(2)}${path.extname(entry.name)}`
+            const dest = path.join(destAssetsDir, destName)
+            copyFileSync(srcPath, dest)
+            pathMap.set(`assets/${entryKey}`, path.relative(userData, dest))
+          }
+        }
       }
+      walkDir(importAssetsDir, '')
     }
 
     remapPaths(campaignData, pathMap)
@@ -147,11 +156,14 @@ function buildZip(
     const campaignData = buildCampaignExport(campaignId, db)
     archive.append(JSON.stringify(campaignData, null, 2), { name: 'campaign.json' })
 
+    const userData = app.getPath('userData')
     const paths = collectAssetPaths(campaignData)
     const added = new Set<string>()
     for (const p of paths) {
-      if (p && existsSync(p) && !added.has(p)) {
-        archive.file(p, { name: `assets/${basename(p)}` })
+      if (!p) continue
+      const absPath = path.resolve(userData, p)
+      if (existsSync(absPath) && !added.has(p)) {
+        archive.file(absPath, { name: p })
         added.add(p)
       }
     }
@@ -173,6 +185,12 @@ interface CampaignExport {
       rotation: number; locked: number; zIndex: number; markerColor: string | null
       ac: number | null; notes: string | null; statusEffects: string | null
     }>
+    gmPins: Array<{
+      x: number; y: number; label: string; icon: string; color: string
+    }>
+    drawings: Array<{
+      type: string; points: string; color: string; width: number; synced: number
+    }>
     fogBitmap: string | null
     exploredBitmap: string | null
     initiative: Array<{ combatantName: string; roll: number; currentTurn: number }>
@@ -192,13 +210,15 @@ function buildCampaignExport(campaignId: number, db: ReturnType<typeof getDb>): 
   ).get(campaignId) as { content: string } | undefined)?.content ?? ''
 
   return {
-    version: 3,
+    version: 4,
     campaign: { name: campaign.name },
     campaignNote,
     maps: maps.map((m) => {
       const tokens = db.prepare('SELECT * FROM tokens WHERE map_id = ?').all(m.id) as any[]
       const fog = (db.prepare('SELECT fog_bitmap, explored_bitmap FROM fog_state WHERE map_id = ?').get(m.id) as any) ?? null
       const initiative = db.prepare('SELECT * FROM initiative WHERE map_id = ?').all(m.id) as any[]
+      const gmPins = db.prepare('SELECT x, y, label, icon, color FROM gm_pins WHERE map_id = ?').all(m.id) as any[]
+      const drawings = db.prepare('SELECT type, points, color, width, synced FROM drawings WHERE map_id = ?').all(m.id) as any[]
       const note = (db.prepare('SELECT content FROM notes WHERE campaign_id = ? AND map_id = ?').get(campaignId, m.id) as any)?.content ?? ''
       return {
         name: m.name,
@@ -221,6 +241,12 @@ function buildCampaignExport(campaignId: number, db: ReturnType<typeof getDb>): 
           ac: t.ac ?? null,
           notes: t.notes ?? null,
           statusEffects: t.status_effects ?? null,
+        })),
+        gmPins: gmPins.map((p) => ({
+          x: p.x, y: p.y, label: p.label, icon: p.icon, color: p.color,
+        })),
+        drawings: drawings.map((d) => ({
+          type: d.type, points: d.points, color: d.color, width: d.width, synced: d.synced,
         })),
         fogBitmap: fog?.fog_bitmap ?? null,
         exploredBitmap: fog?.explored_bitmap ?? null,
@@ -250,15 +276,23 @@ function collectAssetPaths(data: CampaignExport): string[] {
 
 function remapPaths(data: CampaignExport, map: Map<string, string>) {
   for (const m of data.maps) {
-    const baseName = `assets/${basename(m.imagePath)}`
-    if (map.has(baseName)) m.imagePath = map.get(baseName)!
+    m.imagePath = findRemap(m.imagePath, map)
     for (const t of m.tokens) {
-      if (t.imagePath) {
-        const k = `assets/${basename(t.imagePath)}`
-        if (map.has(k)) t.imagePath = map.get(k)!
-      }
+      if (t.imagePath) t.imagePath = findRemap(t.imagePath, map)
     }
   }
+  for (const h of data.handouts) {
+    if (h.imagePath) h.imagePath = findRemap(h.imagePath, map)
+  }
+}
+
+function findRemap(imagePath: string, map: Map<string, string>): string {
+  for (const [key, val] of map) {
+    if (imagePath.endsWith(key.replace(/^assets\//, '')) || imagePath === key) {
+      return val
+    }
+  }
+  return imagePath
 }
 
 function insertCampaignData(data: CampaignExport, db: ReturnType<typeof getDb>): number {
@@ -289,6 +323,18 @@ function insertCampaignData(data: CampaignExport, db: ReturnType<typeof getDb>):
         db.prepare(
           `INSERT INTO fog_state (map_id, fog_bitmap, explored_bitmap) VALUES (?, ?, ?)`
         ).run(mapId, m.fogBitmap, m.exploredBitmap ?? null)
+      }
+
+      for (const p of m.gmPins ?? []) {
+        db.prepare(
+          `INSERT INTO gm_pins (map_id, x, y, label, icon, color) VALUES (?, ?, ?, ?, ?, ?)`
+        ).run(mapId, p.x, p.y, p.label, p.icon, p.color)
+      }
+
+      for (const d of m.drawings ?? []) {
+        db.prepare(
+          `INSERT INTO drawings (map_id, type, points, color, width, synced) VALUES (?, ?, ?, ?, ?, ?)`
+        ).run(mapId, d.type, d.points, d.color, d.width, d.synced)
       }
 
       for (const i of m.initiative) {

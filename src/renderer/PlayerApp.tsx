@@ -769,6 +769,12 @@ function PlayerMapView({
               return <Circle key={`d-${d.id}`} x={cx} y={cy} radius={radius}
                 stroke={d.color} strokeWidth={d.width * scale} listening={false} />
             }
+            if (d.type === 'text' && d.points.length >= 2) {
+              const tx = d.points[0] * scale + offX
+              const ty = d.points[1] * scale + offY
+              return <Text key={`d-${d.id}`} x={tx} y={ty} text={d.text ?? ''}
+                fontSize={14 * scale} fill={d.color} listening={false} />
+            }
             return null
           })}
         </Layer>

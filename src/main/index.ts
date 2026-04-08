@@ -1,12 +1,18 @@
 import { app, BrowserWindow, net, protocol } from 'electron'
 import { pathToFileURL } from 'url'
 import { existsSync, statSync } from 'fs'
+import { resolve, join, sep } from 'path'
 import { initDatabase, closeDatabase, getCustomUserDataPath } from './db/database'
 import { createDMWindow } from './windows'
 import { registerPlayerBridgeHandlers } from './ipc/player-bridge'
 import { registerAppHandlers } from './ipc/app-handlers'
 import { registerDbHandlers } from './ipc/db-handlers'
 import { registerExportImportHandlers } from './ipc/export-import'
+
+// Must be called before app.whenReady()
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'local-asset', privileges: { stream: true, supportFetchAPI: true, standard: false, secure: true } },
+])
 
 // Prevent multiple instances
 const gotLock = app.requestSingleInstanceLock()
@@ -27,12 +33,15 @@ app.on('second-instance', () => {
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   // Register custom protocol for serving local assets (images, audio)
-  // This bypasses the file:// CSP restriction in Electron with contextIsolation
   protocol.handle('local-asset', (request) => {
     try {
-      const filePath = decodeURIComponent(request.url.replace('local-asset://', ''))
-      const userDataPath = getCustomUserDataPath() || app.getPath('userData')
-      const fullPath = filePath.startsWith('/') ? filePath : require('path').join(userDataPath, filePath)
+      const rawPath = decodeURIComponent(request.url.replace('local-asset://', ''))
+      const userDataPath = resolve(getCustomUserDataPath() || app.getPath('userData'))
+      // Always resolve relative to userData; reject absolute paths and traversal
+      const fullPath = resolve(userDataPath, rawPath)
+      if (!fullPath.startsWith(userDataPath + sep) && fullPath !== userDataPath) {
+        return new Response('Forbidden', { status: 403 })
+      }
       if (!existsSync(fullPath)) {
         return new Response('Not found', { status: 404 })
       }
@@ -72,11 +81,10 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
+app.on('will-quit', () => {
   closeDatabase()
 })
 
-// ─── Error Handling ───────────────────────────────────────────────────────────
 process.on('uncaughtException', (error) => {
   console.error('[BoltBerry] Uncaught Exception:', error)
 })

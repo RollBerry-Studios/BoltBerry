@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
-import { CREATE_TABLES_SQL, SEED_SCHEMA_VERSION, MIGRATE_V1_TO_V2, MIGRATE_V2_TO_V3, MIGRATE_V3_TO_V4, MIGRATE_V4_TO_V5, MIGRATE_V5_TO_V6, MIGRATE_V6_TO_V7, MIGRATE_V7_TO_V8, MIGRATE_V8_TO_V9 } from './schema'
+import { CREATE_TABLES_SQL, SEED_SCHEMA_VERSION, MIGRATE_V1_TO_V2, MIGRATE_V2_TO_V3, MIGRATE_V3_TO_V4, MIGRATE_V4_TO_V5, MIGRATE_V5_TO_V6, MIGRATE_V6_TO_V7, MIGRATE_V7_TO_V8, MIGRATE_V8_TO_V9, MIGRATE_V9_TO_V10 } from './schema'
 
 let db: Database.Database | null = null
 
@@ -51,6 +51,7 @@ export function initDatabase(): Database.Database {
   if (version < 7) db.exec(MIGRATE_V6_TO_V7)
   if (version < 8) db.exec(MIGRATE_V7_TO_V8)
   if (version < 9) db.exec(MIGRATE_V8_TO_V9)
+  if (version < 10) db.exec(MIGRATE_V9_TO_V10)
 
   return db
 }

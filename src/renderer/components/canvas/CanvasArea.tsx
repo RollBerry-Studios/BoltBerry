@@ -84,7 +84,7 @@ export function CanvasArea() {
   async function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDropHighlight(false)
-    if (!activeMapId || !window.electronAPI) return
+    if (!window.electronAPI) return
 
     // Handle OS file drops
     if (e.dataTransfer.files.length > 0) {
@@ -95,6 +95,42 @@ export function CanvasArea() {
       const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png'
       const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png'
       const dataUrl = `data:${mimeType};base64,${base64}`
+
+      // If no active map, create one from the dropped image
+      if (!activeMapId) {
+        const assetResult = await window.electronAPI.saveAssetImage({
+          dataUrl,
+          originalName: file.name,
+          type: 'map',
+          campaignId: useCampaignStore.getState().activeCampaignId ?? 0,
+        })
+        if (!assetResult) return
+        const mapName = file.name.replace(/\.[^.]+$/, '') || 'Neue Karte'
+        const dbResult = await window.electronAPI.dbRun(
+          `INSERT INTO maps (campaign_id, name, image_path, order_index, rotation) VALUES (?, ?, ?, ?, 0)`,
+          [useCampaignStore.getState().activeCampaignId, mapName, assetResult.path, useCampaignStore.getState().activeMaps.length]
+        )
+        useCampaignStore.getState().addMap({
+          id: dbResult.lastInsertRowid,
+          campaignId: useCampaignStore.getState().activeCampaignId ?? 0,
+          name: mapName,
+          imagePath: assetResult.path,
+          gridType: 'square',
+          gridSize: 50,
+          ftPerUnit: 5,
+          orderIndex: useCampaignStore.getState().activeMaps.length,
+          rotation: 0,
+          gridOffsetX: 0,
+          gridOffsetY: 0,
+          cameraX: null,
+          cameraY: null,
+          cameraScale: null,
+        })
+        useCampaignStore.getState().setActiveMap(dbResult.lastInsertRowid)
+        return
+      }
+
+      // If active map, create a token at drop position
 
       const result = await window.electronAPI.saveAssetImage({
         dataUrl,
@@ -248,6 +284,8 @@ export function CanvasArea() {
             map={activeMap}
             stageRef={stageRef}
             canvasSize={size}
+            gridOffsetX={activeMap.gridOffsetX ?? 0}
+            gridOffsetY={activeMap.gridOffsetY ?? 0}
           />
 
           {/* Layer 2: Fog of War */}

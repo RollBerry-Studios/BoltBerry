@@ -10,12 +10,14 @@ interface MapLayerProps {
   map: MapRecord
   stageRef: RefObject<Konva.Stage>
   canvasSize: { width: number; height: number }
+  gridOffsetX: number
+  gridOffsetY: number
 }
 
 const MIN_SCALE = 0.05
 const MAX_SCALE = 12
 
-export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
+export function MapLayer({ map, stageRef, canvasSize, gridOffsetX, gridOffsetY }: MapLayerProps) {
   const { scale, offsetX, offsetY, setTransform, reset } = useMapTransformStore()
   const resolvedImagePath = map.imagePath
   const { img: image, imgW: natW, imgH: natH } = useRotatedImage(resolvedImagePath, map.rotation ?? 0)
@@ -256,12 +258,12 @@ export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
               const cols = Math.ceil(imgW / cellPx) + 1
               const rows = Math.ceil(imgH / cellPx) + 1
               for (let c = 0; c <= cols; c++) {
-                const x = x0 + c * cellPx
+                const x = gridOffsetX + c * cellPx + offsetX
                 ctx.moveTo(x, y0)
                 ctx.lineTo(x, y0 + imgH)
               }
               for (let r = 0; r <= rows; r++) {
-                const y = y0 + r * cellPx
+                const y = gridOffsetY + r * cellPx + offsetY
                 ctx.moveTo(x0, y)
                 ctx.lineTo(x0 + imgW, y)
               }

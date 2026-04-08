@@ -169,7 +169,7 @@ export function registerAppHandlers(): void {
           
           const orderIndex = db.prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS next FROM maps WHERE campaign_id = ?').get(campaignId)!.next
           db.prepare(
-            'INSERT INTO maps (campaign_id, name, image_path, order_index, rotation) VALUES (?, ?, ?, ?, 0)'
+            'INSERT INTO maps (campaign_id, name, image_path, order_index, rotation, grid_offset_x, grid_offset_y) VALUES (?, ?, ?, ?, 0, 0, 0)'
           ).run(campaignId, fileName, filePath, orderIndex)
           
           addedCount++

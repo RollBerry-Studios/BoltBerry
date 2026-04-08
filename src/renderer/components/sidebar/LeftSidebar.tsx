@@ -8,6 +8,8 @@ import { useInitiativeStore } from '../../stores/initiativeStore'
 import { AssetBrowser } from './panels/AssetBrowser'
 import { SettingsPanel } from './panels/SettingsPanel'
 import { useImageUrl } from '../../hooks/useImageUrl'
+import { detectGrid } from '../../utils/gridDetect'
+import { detectMargins } from '../../utils/autoCrop'
 import type { MapRecord } from '@shared/ipc-types'
 
 export function LeftSidebar() {
@@ -31,6 +33,8 @@ export function LeftSidebar() {
   const [gridSize, setGridSize] = useState(50)
   const [ftPerUnit, setFtPerUnit] = useState(5)
   const [rotation, setRotation] = useState<0 | 90 | 180 | 270>(0)
+  const [gridOffsetX, setGridOffsetX] = useState(0)
+  const [gridOffsetY, setGridOffsetY] = useState(0)
 
   useEffect(() => {
     if (!activeCampaignId) return
@@ -43,6 +47,8 @@ export function LeftSidebar() {
     setGridSize(activeMap.gridSize)
     setFtPerUnit(activeMap.ftPerUnit)
     setRotation((activeMap.rotation ?? 0) as 0 | 90 | 180 | 270)
+    setGridOffsetX(activeMap.gridOffsetX ?? 0)
+    setGridOffsetY(activeMap.gridOffsetY ?? 0)
   }, [activeMapId])
 
   async function loadMaps(campaignId: number) {
@@ -52,8 +58,8 @@ export function LeftSidebar() {
         id: number; campaign_id: number; name: string; image_path: string
         grid_type: string; grid_size: number; ft_per_unit: number; order_index: number
         camera_x: number | null; camera_y: number | null; camera_scale: number | null
-        rotation: number | null
-      }>('SELECT id, campaign_id, name, image_path, grid_type, grid_size, ft_per_unit, order_index, camera_x, camera_y, camera_scale, rotation FROM maps WHERE campaign_id = ? ORDER BY order_index', [campaignId])
+        rotation: number | null; grid_offset_x: number; grid_offset_y: number
+      }>('SELECT id, campaign_id, name, image_path, grid_type, grid_size, ft_per_unit, order_index, camera_x, camera_y, camera_scale, rotation, grid_offset_x, grid_offset_y FROM maps WHERE campaign_id = ? ORDER BY order_index', [campaignId])
 
       setActiveMaps(rows.map((r) => ({
         id: r.id,
@@ -65,6 +71,8 @@ export function LeftSidebar() {
         ftPerUnit: r.ft_per_unit ?? 5,
         orderIndex: r.order_index,
         rotation: r.rotation ?? 0,
+        gridOffsetX: r.grid_offset_x ?? 0,
+        gridOffsetY: r.grid_offset_y ?? 0,
         cameraX: r.camera_x ?? null,
         cameraY: r.camera_y ?? null,
         cameraScale: r.camera_scale ?? null,
@@ -94,7 +102,7 @@ export function LeftSidebar() {
       }
 
       const result = await window.electronAPI.dbRun(
-        `INSERT INTO maps (campaign_id, name, image_path, order_index, rotation) VALUES (?, ?, ?, ?, 0)`,
+        `INSERT INTO maps (campaign_id, name, image_path, order_index, rotation, grid_offset_x, grid_offset_y) VALUES (?, ?, ?, ?, 0, 0, 0)`,
         [activeCampaignId, finalMapName, asset.path, activeMaps.length]
       )
       const newMap: MapRecord = {
@@ -107,6 +115,8 @@ export function LeftSidebar() {
         ftPerUnit: 5,
         orderIndex: activeMaps.length,
         rotation: 0,
+        gridOffsetX: 0,
+        gridOffsetY: 0,
         cameraX: null,
         cameraY: null,
         cameraScale: null,
@@ -115,6 +125,13 @@ export function LeftSidebar() {
       setActiveMap(newMap.id)
       setAddingMap(false)
       setMapName('')
+
+      // Auto-detect grid size from image
+      detectGrid(asset.path).then((result) => {
+        if (result.confidence > 0.3 && result.gridSize > 10) {
+          handleGridChange(result.gridType, result.gridSize, undefined, 0, 0)
+        }
+      }).catch(() => { /* ignore detection errors */ })
     } catch (err) {
       console.error('[LeftSidebar] handleAddMap failed:', err)
       alert(`Karte konnte nicht hinzugefügt werden: ${err}`)
@@ -143,7 +160,7 @@ export function LeftSidebar() {
       }
 
       const result = await window.electronAPI.dbRun(
-        `INSERT INTO maps (campaign_id, name, image_path, order_index, rotation) VALUES (?, ?, ?, ?, 0)`,
+        `INSERT INTO maps (campaign_id, name, image_path, order_index, rotation, grid_offset_x, grid_offset_y) VALUES (?, ?, ?, ?, 0, 0, 0)`,
         [activeCampaignId, finalMapName, imagePath, activeMaps.length]
       )
       const newMap: MapRecord = {
@@ -156,6 +173,8 @@ export function LeftSidebar() {
         ftPerUnit: 5,
         orderIndex: activeMaps.length,
         rotation: 0,
+        gridOffsetX: 0,
+        gridOffsetY: 0,
         cameraX: null,
         cameraY: null,
         cameraScale: null,
@@ -164,24 +183,34 @@ export function LeftSidebar() {
       setActiveMap(newMap.id)
       setAddingMap(false)
       setMapName('')
+
+      detectGrid(imagePath).then((result) => {
+        if (result.confidence > 0.3 && result.gridSize > 10) {
+          handleGridChange(result.gridType, result.gridSize, undefined, 0, 0)
+        }
+      }).catch(() => { /* ignore detection errors */ })
     } catch (err) {
       console.error('[LeftSidebar] handleAddMapFromPdf failed:', err)
     }
   }
 
-  async function handleGridChange(type: MapRecord['gridType'], size: number, fpu?: number) {
+  async function handleGridChange(type: MapRecord['gridType'], size: number, fpu?: number, offsetX?: number, offsetY?: number) {
     if (!activeMapId || !window.electronAPI) return
     const newFpu = fpu ?? ftPerUnit
+    const newOffsetX = offsetX ?? gridOffsetX
+    const newOffsetY = offsetY ?? gridOffsetY
     setGridType(type)
     setGridSize(size)
     setFtPerUnit(newFpu)
+    setGridOffsetX(newOffsetX)
+    setGridOffsetY(newOffsetY)
     try {
       await window.electronAPI.dbRun(
-        'UPDATE maps SET grid_type = ?, grid_size = ?, ft_per_unit = ? WHERE id = ?',
-        [type, size, newFpu, activeMapId]
+        'UPDATE maps SET grid_type = ?, grid_size = ?, ft_per_unit = ?, grid_offset_x = ?, grid_offset_y = ? WHERE id = ?',
+        [type, size, newFpu, newOffsetX, newOffsetY, activeMapId]
       )
       const updatedMaps = activeMaps.map((m) =>
-        m.id === activeMapId ? { ...m, gridType: type, gridSize: size, ftPerUnit: newFpu } : m
+        m.id === activeMapId ? { ...m, gridType: type, gridSize: size, ftPerUnit: newFpu, gridOffsetX: newOffsetX, gridOffsetY: newOffsetY } : m
       )
       useCampaignStore.getState().setActiveMaps(updatedMaps)
       syncMapStateToPlayer(updatedMaps.find((m) => m.id === activeMapId)!)
@@ -375,6 +404,26 @@ export function LeftSidebar() {
                   style={{ width: 70 }}
                 />
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>px</span>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: 'var(--text-xs)', padding: '2px 6px', marginLeft: 'var(--sp-1)' }}
+                  onClick={async () => {
+                    if (!activeMap?.imagePath) return
+                    try {
+                      const result = await detectGrid(activeMap.imagePath)
+                      if (result.confidence > 0.2 && result.gridSize > 10) {
+                        handleGridChange(result.gridType, result.gridSize, undefined, 0, 0)
+                      } else {
+                        alert('Kein Raster erkannt. Bitte manuell einstellen.')
+                      }
+                    } catch (err) {
+                      console.error('[LeftSidebar] grid detect failed:', err)
+                    }
+                  }}
+                  title="Raster automatisch erkennen"
+                >
+                  🔍 Erkennen
+                </button>
               </div>
             )}
 
@@ -396,6 +445,48 @@ export function LeftSidebar() {
                   style={{ width: 60 }}
                 />
                 <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>ft / Feld</span>
+              </div>
+            )}
+
+            {/* Offset X */}
+            {gridType !== 'none' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flexShrink: 0 }}>
+                  Offset X
+                </label>
+                <input
+                  className="input"
+                  type="number"
+                  min={0} max={gridSize * 2} step={1}
+                  value={gridOffsetX}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (v >= 0 && v <= gridSize * 2) handleGridChange(gridType, gridSize, undefined, v, undefined)
+                  }}
+                  style={{ width: 70 }}
+                />
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>px</span>
+              </div>
+            )}
+
+            {/* Offset Y */}
+            {gridType !== 'none' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flexShrink: 0 }}>
+                  Offset Y
+                </label>
+                <input
+                  className="input"
+                  type="number"
+                  min={0} max={gridSize * 2} step={1}
+                  value={gridOffsetY}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value)
+                    if (v >= 0 && v <= gridSize * 2) handleGridChange(gridType, gridSize, undefined, undefined, v)
+                  }}
+                  style={{ width: 70 }}
+                />
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>px</span>
               </div>
             )}
 

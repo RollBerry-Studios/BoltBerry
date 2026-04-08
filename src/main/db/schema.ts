@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 10
 
 // Migration: v1 → v2 — add explored_bitmap column to fog_state
 export const MIGRATE_V1_TO_V2 = `
@@ -80,6 +80,12 @@ CREATE TABLE IF NOT EXISTS drawings (
 UPDATE schema_version SET version = 9;
 `
 
+export const MIGRATE_V9_TO_V10 = `
+ALTER TABLE maps ADD COLUMN grid_offset_x REAL NOT NULL DEFAULT 0;
+ALTER TABLE maps ADD COLUMN grid_offset_y REAL NOT NULL DEFAULT 0;
+UPDATE schema_version SET version = 10;
+`
+
 export const CREATE_TABLES_SQL = `
 -- Campaigns
 CREATE TABLE IF NOT EXISTS campaigns (
@@ -102,7 +108,9 @@ CREATE TABLE IF NOT EXISTS maps (
   camera_x     REAL,
   camera_y     REAL,
   camera_scale REAL,
-  rotation     INTEGER NOT NULL DEFAULT 0
+  rotation     INTEGER NOT NULL DEFAULT 0,
+  grid_offset_x REAL    NOT NULL DEFAULT 0,
+  grid_offset_y REAL    NOT NULL DEFAULT 0
 );
 
 -- Fog of War bitmaps (one per map)
@@ -200,5 +208,5 @@ CREATE TABLE IF NOT EXISTS schema_version (
 `
 
 export const SEED_SCHEMA_VERSION = `
-INSERT OR IGNORE INTO schema_version (version) VALUES (9);
+INSERT OR IGNORE INTO schema_version (version) VALUES (10);
 `

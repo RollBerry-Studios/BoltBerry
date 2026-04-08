@@ -178,7 +178,7 @@ interface CampaignExport {
   version: number
   campaign: { name: string }
   maps: Array<{
-    name: string; imagePath: string; gridType: string; gridSize: number; orderIndex: number; rotation: number; ftPerUnit: number
+    name: string; imagePath: string; gridType: string; gridSize: number; orderIndex: number; rotation: number; ftPerUnit: number; gridOffsetX: number; gridOffsetY: number
     tokens: Array<{
       name: string; imagePath: string | null; x: number; y: number; size: number
       hpCurrent: number; hpMax: number; visibleToPlayers: number
@@ -228,6 +228,8 @@ function buildCampaignExport(campaignId: number, db: ReturnType<typeof getDb>): 
         orderIndex: m.order_index,
         rotation: m.rotation ?? 0,
         ftPerUnit: m.ft_per_unit ?? 5,
+        gridOffsetX: m.grid_offset_x ?? 0,
+        gridOffsetY: m.grid_offset_y ?? 0,
         tokens: tokens.map((t) => ({
           name: t.name,
           imagePath: t.image_path,
@@ -306,9 +308,9 @@ function insertCampaignData(data: CampaignExport, db: ReturnType<typeof getDb>):
 
     for (const m of data.maps) {
       const mapResult = db.prepare(
-        `INSERT INTO maps (campaign_id, name, image_path, grid_type, grid_size, order_index, rotation, ft_per_unit)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(campaignId, m.name, m.imagePath, m.gridType, m.gridSize, m.orderIndex, m.rotation ?? 0, m.ftPerUnit ?? 5)
+        `INSERT INTO maps (campaign_id, name, image_path, grid_type, grid_size, order_index, rotation, ft_per_unit, grid_offset_x, grid_offset_y)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(campaignId, m.name, m.imagePath, m.gridType, m.gridSize, m.orderIndex, m.rotation ?? 0, m.ftPerUnit ?? 5, m.gridOffsetX ?? 0, m.gridOffsetY ?? 0)
       const mapId = Number(mapResult.lastInsertRowid)
 
       for (const t of m.tokens) {

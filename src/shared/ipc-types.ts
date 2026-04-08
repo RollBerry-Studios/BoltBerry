@@ -77,6 +77,8 @@ export interface MapRecord {
   ftPerUnit: number  // feet per grid unit (e.g. 5 for D&D standard)
   orderIndex: number
   rotation: number   // 0 | 90 | 180 | 270
+  gridOffsetX: number  // pixel offset for grid alignment
+  gridOffsetY: number  // pixel offset for grid alignment
   cameraX: number | null
   cameraY: number | null
   cameraScale: number | null

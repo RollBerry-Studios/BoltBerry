@@ -1,4 +1,4 @@
-import { useEffect, useRef, RefObject, useState } from 'react'
+import { useEffect, useRef, RefObject } from 'react'
 import { Layer, Image as KonvaImage, Shape } from 'react-konva'
 import Konva from 'konva'
 import type { MapRecord } from '@shared/ipc-types'
@@ -19,37 +19,12 @@ const MAX_SCALE = 12
 export function MapLayer({ map, stageRef, canvasSize }: MapLayerProps) {
   const { scale, offsetX, offsetY, setTransform, reset } = useMapTransformStore()
   const { activeTool } = useUIStore()
-  const [resolvedImagePath, setResolvedImagePath] = useState<string | null>(null)
+  const resolvedImagePath = map.imagePath
   const { img: image, imgW: natW, imgH: natH } = useRotatedImage(resolvedImagePath, map.rotation ?? 0)
   const isPanning = useRef(false)
   const lastPointer = useRef({ x: 0, y: 0 })
   const cameraInitializedRef = useRef(false)
   const cameraSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Resolve image path when map changes
-  useEffect(() => {
-    async function resolvePath() {
-      console.log('[MapLayer] Resolving path for map:', map.id, 'with imagePath:', map.imagePath)
-      
-      if (!window.electronAPI) {
-        // Development fallback - pass relative path to main process
-        setResolvedImagePath(map.imagePath)
-        return
-      }
-      
-      try {
-        // In production, pass relative path directly to main process for base64 conversion
-        // This avoids file:// URL issues entirely
-        setResolvedImagePath(map.imagePath)
-      } catch (err) {
-        console.error('[MapLayer] Failed to resolve image path:', err)
-        // Fallback to direct path
-        setResolvedImagePath(map.imagePath)
-      }
-    }
-    
-    resolvePath()
-  }, [map.imagePath, map.id])
 
   // Clear pending camera-save timer on unmount to prevent stale writes
   useEffect(() => {

@@ -40,6 +40,9 @@ export const IPC = {
 
   // DM → Player: camera viewport sync
   PLAYER_CAMERA: 'player:camera',
+
+  // Context menu
+  SHOW_CONTEXT_MENU: 'app:show-context-menu',
 } as const
 
 // ─── Shared Data Types ────────────────────────────────────────────────────────

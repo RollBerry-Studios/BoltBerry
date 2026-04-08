@@ -82,24 +82,27 @@ export const useCampaignStore = create<CampaignState>((set) => ({
       // Reload maps for active campaign if needed
       const state = useCampaignStore.getState()
       if (state.activeCampaignId) {
-        const maps = await window.electronAPI.dbQuery<MapRecord & { campaign_id: number }>(
-          'SELECT * FROM maps WHERE campaign_id = ? ORDER BY order_index',
-          [state.activeCampaignId]
-        )
+        const rows = await window.electronAPI.dbQuery<{
+          id: number; campaign_id: number; name: string; image_path: string
+          grid_type: string; grid_size: number; ft_per_unit: number; order_index: number
+          camera_x: number | null; camera_y: number | null; camera_scale: number | null
+          rotation: number | null
+        }>('SELECT * FROM maps WHERE campaign_id = ? ORDER BY order_index', [state.activeCampaignId])
+
         set({
-          activeMaps: maps.map(m => ({
-            id: m.id,
-            campaignId: m.campaign_id,
-            name: m.name,
-            imagePath: m.image_path,
-            gridType: m.grid_type as 'square' | 'hex' | 'none',
-            gridSize: m.grid_size,
-            ftPerUnit: m.ft_per_unit,
-            orderIndex: m.order_index,
-            rotation: m.rotation,
-            cameraX: m.camera_x,
-            cameraY: m.camera_y,
-            cameraScale: m.camera_scale,
+          activeMaps: rows.map(r => ({
+            id: r.id,
+            campaignId: r.campaign_id,
+            name: r.name,
+            imagePath: r.image_path,
+            gridType: r.grid_type as 'square' | 'hex' | 'none',
+            gridSize: r.grid_size,
+            ftPerUnit: r.ft_per_unit,
+            orderIndex: r.order_index,
+            rotation: r.rotation ?? 0,
+            cameraX: r.camera_x,
+            cameraY: r.camera_y,
+            cameraScale: r.camera_scale,
           }))
         })
       }

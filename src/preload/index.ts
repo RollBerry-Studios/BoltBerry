@@ -26,6 +26,9 @@ const dmApi = {
   getImageAsBase64: (path: string) => ipcRenderer.invoke('GET_IMAGE_AS_BASE64', path),
   getUserDataPath: () => ipcRenderer.invoke('GET_USER_DATA_PATH'),
   rescanContentFolder: () => ipcRenderer.invoke('RESCAN_CONTENT_FOLDER'),
+  showContextMenu: (items: { label: string; action: string; danger?: boolean }[]) =>
+    ipcRenderer.invoke(IPC.SHOW_CONTEXT_MENU, items),
+  deleteMapConfirm: (mapName: string) => ipcRenderer.invoke('DELETE_MAP_CONFIRM', mapName),
 
   // File operations
   importFile: (type: 'map' | 'token' | 'atmosphere' | 'audio', campaignId?: number) =>

@@ -44,8 +44,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool }: FogLayerPr
     const explored = document.createElement('canvas')
     explored.width = imgW; explored.height = imgH
     const exploredCtx = explored.getContext('2d')!
-    exploredCtx.fillStyle = 'rgba(0,0,0,1)'  // fully black = nothing explored
-    exploredCtx.fillRect(0, 0, imgW, imgH)
+    // starts fully transparent — everything visible by default
     exploredCanvasRef.current = explored
 
     const covered = document.createElement('canvas')
@@ -115,8 +114,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool }: FogLayerPr
 
     const ec = explored.getContext('2d')!
     ec.clearRect(0, 0, explored.width, explored.height)
-    ec.fillStyle = 'rgba(0,0,0,1)'
-    ec.fillRect(0, 0, explored.width, explored.height)
+    // starts fully transparent — everything visible by default
 
     const cc = covered.getContext('2d')!
     cc.clearRect(0, 0, covered.width, covered.height)
@@ -245,7 +243,7 @@ function loadBitmapToCanvas(dataUrl: string, canvas: HTMLCanvasElement): Promise
       ctx.drawImage(img, 0, 0)
       resolve()
     }
-    img.onerror = resolve
+    img.onerror = () => resolve()
     img.src = dataUrl
   })
 }

@@ -1,6 +1,6 @@
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog, app, Menu, BrowserWindow } from 'electron'
 import { join, extname, relative } from 'path'
-import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync, readFileSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync, readFileSync, unlinkSync } from 'fs'
 import { IPC } from '../../shared/ipc-types'
 import {
   createPlayerWindow,
@@ -85,13 +85,10 @@ export function registerAppHandlers(): void {
     const { promises: { readFile } } = require('fs')
     
     try {
-      console.log('[AppHandlers] GET_IMAGE_AS_BASE64 called with:', imagePath)
-      
       // Remove file:// prefix if present
       let cleanPath = imagePath
       if (imagePath.startsWith('file://')) {
-        cleanPath = imagePath.substring(7) // Remove 'file://' prefix
-        console.log('[AppHandlers] Removed file:// prefix, clean path:', cleanPath)
+        cleanPath = imagePath.substring(7)
       }
       
       let fullPath: string
@@ -104,7 +101,6 @@ export function registerAppHandlers(): void {
         fullPath = join(userDataPath, cleanPath)
       }
       
-      console.log('[AppHandlers] Reading image from:', fullPath)
       const imageBuffer = await readFile(fullPath)
       const base64 = imageBuffer.toString('base64')
       const extension = fullPath.toLowerCase().split('.').pop() || 'png'
@@ -113,7 +109,6 @@ export function registerAppHandlers(): void {
       
       return `data:${mimeType};base64,${base64}`
     } catch (err) {
-      console.error('[AppHandlers] Failed to read image:', err)
       return null
     }
   })
@@ -128,85 +123,64 @@ export function registerAppHandlers(): void {
       const userDataPath = getCustomUserDataPath() || app.getPath('userData')
       const assetsPath = join(userDataPath, 'assets', 'map')
       
-      console.log('[AppHandlers] Rescanning content folder:', assetsPath)
-      
-      // Get all existing files in the assets/map directory
       let files: string[] = []
       try {
         files = await readdir(assetsPath)
       } catch (err) {
-        console.log('[AppHandlers] Assets folder does not exist, creating it')
+        const { mkdirSync } = require('fs')
+        mkdirSync(assetsPath, { recursive: true })
         return { scanned: 0, added: 0, removed: 0, message: 'Keine Dateien gefunden' }
       }
       
-      // Filter for image files
-      const imageFiles = files.filter(f => 
+      const imageFiles = files.filter((f: string) => 
         f.endsWith('.png') || f.endsWith('.jpg') || f.endsWith('.jpeg') || f.endsWith('.webp')
       )
       
-      console.log('[AppHandlers] Found image files:', imageFiles)
-      
-      // Get database connection
       const db = getDb()
-      
-      // Get all maps from database
+
       const maps = db.prepare('SELECT id, image_path, name FROM maps').all() as { id: number; image_path: string; name: string }[]
-      console.log('[AppHandlers] Existing maps in database:', maps.length)
       
-      // Create a map of existing files for quick lookup
-      const existingFiles = new Set(imageFiles.map(f => `assets/map/${f}`))
+      const existingFilePaths = new Set(imageFiles.map((f: string) => `assets/map/${f}`))
       
-      // Remove database entries for files that no longer exist
       let removedCount = 0
       for (const map of maps) {
-        if (!existingFiles.has(map.image_path)) {
-          console.log('[AppHandlers] Removing map entry for missing file:', map.image_path)
+        if (!existingFilePaths.has(map.image_path)) {
           db.prepare('DELETE FROM maps WHERE id = ?').run(map.id)
+          db.prepare('DELETE FROM assets WHERE stored_path = ?').run(map.image_path)
+          db.prepare('DELETE FROM tokens WHERE map_id = ?').run(map.id)
           removedCount++
         }
       }
       
-      // Get existing assets from database to avoid duplicates
-      const assets = db.prepare('SELECT stored_path FROM assets WHERE type = "map"').all() as { stored_path: string }[]
-      const existingAssets = new Set(assets.map(a => a.stored_path))
+      const existingMapPaths = new Set(maps.map((m: { image_path: string }) => m.image_path))
       
-      // Add new files that aren't in the database yet
       let addedCount = 0
       for (const file of imageFiles) {
         const filePath = `assets/map/${file}`
-        if (!existingAssets.has(filePath)) {
-          console.log('[AppHandlers] Adding new file to database:', filePath)
-          
-          // Extract name from filename (remove extension)
+        if (!existingMapPaths.has(filePath)) {
           const fileName = file.replace(/\.[^/.]+$/, "") || file
           
-          // Insert into assets table
-          const assetStmt = db.prepare(
-            'INSERT INTO assets (original_name, stored_path, type, campaign_id) VALUES (?, ?, ?, ?)'
-          )
-          const assetResult = assetStmt.run(fileName, filePath, 'map', null)
-          
-          // Insert into maps table with auto-generated name
-          const mapStmt = db.prepare(
-            'INSERT INTO maps (campaign_id, name, image_path, order_index, rotation) VALUES (?, ?, ?, ?, 0)'
-          )
-          // Use a default campaign ID (first campaign) or create one if none exists
           let campaignId = db.prepare('SELECT id FROM campaigns LIMIT 1').get()?.id
           if (!campaignId) {
-            // Create default campaign
-            const campaignStmt = db.prepare(
+            const campaignResult = db.prepare(
               'INSERT INTO campaigns (name, created_at, last_opened) VALUES (?, datetime("now"), datetime("now"))'
-            )
-            const campaignResult = campaignStmt.run('Standard Kampagne')
+            ).run('Standard Kampagne')
             campaignId = campaignResult.lastInsertRowid as number
           }
-          mapStmt.run(campaignId, fileName, filePath, 0)
+
+          db.prepare(
+            'INSERT INTO assets (original_name, stored_path, type, campaign_id) VALUES (?, ?, ?, ?)'
+          ).run(fileName, filePath, 'map', campaignId)
+          
+          const orderIndex = db.prepare('SELECT COALESCE(MAX(order_index), -1) + 1 AS next FROM maps WHERE campaign_id = ?').get(campaignId)!.next
+          db.prepare(
+            'INSERT INTO maps (campaign_id, name, image_path, order_index, rotation) VALUES (?, ?, ?, ?, 0)'
+          ).run(campaignId, fileName, filePath, orderIndex)
           
           addedCount++
         }
       }
       
-      console.log('[AppHandlers] Rescan complete - Removed:', removedCount, 'Added:', addedCount)
       return { 
         scanned: imageFiles.length, 
         added: addedCount, 
@@ -216,9 +190,7 @@ export function registerAppHandlers(): void {
     } catch (err) {
       console.error('[AppHandlers] Failed to rescan content folder:', err)
       return { 
-        scanned: 0, 
-        added: 0, 
-        removed: 0,
+        scanned: 0, added: 0, removed: 0,
         message: 'Fehler beim Scannen: ' + (err instanceof Error ? err.message : String(err))
       }
     }
@@ -336,5 +308,52 @@ export function registerAppHandlers(): void {
   ipcMain.handle('GET_USER_DATA_PATH', () => {
     const { app } = require('electron')
     return app.getPath('userData')
+  })
+
+  // Context menu: renderer sends menu items, main process shows native menu and returns selected action
+  ipcMain.handle(IPC.SHOW_CONTEXT_MENU, async (event, items: { label: string; action: string; danger?: boolean }[]) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return null
+
+    return new Promise<string | null>((resolve) => {
+      let resolved = false
+      const safeResolve = (value: string | null) => {
+        if (!resolved) {
+          resolved = true
+          resolve(value)
+        }
+      }
+
+      const menuItems = items.map((item) => ({
+        label: item.label,
+        click: () => safeResolve(item.action),
+      }))
+
+      const menu = Menu.buildFromTemplate(menuItems)
+
+      menu.once('menu-will-close', () => {
+        // Small delay to let click handler fire first if an item was selected
+        setTimeout(() => safeResolve(null), 50)
+      })
+
+      menu.popup({ window: win })
+    })
+  })
+
+  // Delete map (with native confirmation dialog)
+  ipcMain.handle('DELETE_MAP_CONFIRM', async (event, mapName: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return false
+
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'Karte löschen',
+      message: `Karte "${mapName}" wirklich löschen?`,
+      detail: 'Diese Aktion kann nicht rückgängig gemacht werden.',
+      buttons: ['Abbrechen', 'Löschen'],
+      defaultId: 0,
+      cancelId: 0,
+    })
+    return response === 1
   })
 }

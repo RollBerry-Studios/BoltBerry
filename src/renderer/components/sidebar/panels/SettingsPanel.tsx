@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '../../../stores/settingsStore'
+import { useCampaignStore } from '../../../stores/campaignStore'
 
 export function SettingsPanel() {
   const { t } = useTranslation()
@@ -19,9 +20,9 @@ export function SettingsPanel() {
   async function handleRescanContent() {
     if (window.electronAPI) {
       try {
-        // Show scanning message
         const result = await window.electronAPI.rescanContentFolder()
-        alert(`Inhalte wurden erfolgreich neu gescannt:\n${result.message}`)
+        await useCampaignStore.getState().refreshCampaigns()
+        alert(result.message)
       } catch (err) {
         console.error('[SettingsPanel] Failed to rescan content folder:', err)
         alert('Fehler beim Scannen des Inhaltsordners: ' + (err instanceof Error ? err.message : String(err)))

@@ -17,7 +17,7 @@ export function LeftSidebar() {
     addMap,
   } = useCampaignStore()
 
-  const [tab, setTab] = useState<'maps' | 'assets'>('maps')
+  const [tab, setTab] = useState<'maps' | 'assets' | 'settings'>('maps')
   const [addingMap, setAddingMap] = useState(false)
   const [mapName, setMapName] = useState('')
 
@@ -259,50 +259,32 @@ export function LeftSidebar() {
               marginBottom: 'var(--sp-1)', transition: 'background var(--transition)',
             }}
             onClick={() => setActiveMap(map.id)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              // Show context menu for map operations
-              if (window.electronAPI) {
-                const menu = [
-                  {
-                    label: 'Umbenennen',
-                    click: () => {
-                      const newName = prompt('Neuer Name:', map.name);
-                      if (newName && newName.trim() && window.electronAPI) {
-                        window.electronAPI.dbRun(
-                          'UPDATE maps SET name = ? WHERE id = ?',
-                          [newName.trim(), map.id]
-                        ).then(() => {
-                          // Refresh maps list
-                          useCampaignStore.getState().refreshCampaigns();
-                        });
-                      }
-                    }
-                  },
-                  {
-                    label: 'Löschen',
-                    click: () => {
-                      if (confirm(`Karte "${map.name}" wirklich löschen?`)) {
-                        if (window.electronAPI) {
-                          window.electronAPI.dbRun(
-                            'DELETE FROM maps WHERE id = ?',
-                            [map.id]
-                          ).then(() => {
-                            // Refresh maps list
-                            useCampaignStore.getState().refreshCampaigns();
-                          });
-                        }
-                      }
-                    }
-                  }
-                ];
-                
-                // Simple dropdown implementation
-                const action = prompt(`Was möchten Sie mit "${map.name}" tun?\n1. Umbenennen\n2. Löschen`, '1');
-                if (action === '1') {
-                  menu[0].click();
-                } else if (action === '2') {
-                  menu[1].click();
+            onContextMenu={async (e) => {
+              e.preventDefault()
+              if (!window.electronAPI) return
+
+              const selectedAction = await window.electronAPI.showContextMenu([
+                { label: 'Umbenennen', action: 'rename' },
+                { label: 'Löschen', action: 'delete', danger: true },
+              ])
+
+              if (selectedAction === 'rename') {
+                const newName = prompt('Neuer Name:', map.name)
+                if (newName && newName.trim()) {
+                  await window.electronAPI.dbRun(
+                    'UPDATE maps SET name = ? WHERE id = ?',
+                    [newName.trim(), map.id]
+                  )
+                  useCampaignStore.getState().refreshCampaigns()
+                }
+              } else if (selectedAction === 'delete') {
+                const confirmed = await window.electronAPI.deleteMapConfirm(map.name)
+                if (confirmed) {
+                  await window.electronAPI.dbRun(
+                    'DELETE FROM maps WHERE id = ?',
+                    [map.id]
+                  )
+                  useCampaignStore.getState().refreshCampaigns()
                 }
               }
             }}

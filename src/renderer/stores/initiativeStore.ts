@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import type { InitiativeEntry } from '@shared/ipc-types'
+import type { InitiativeEntry, EffectTimer } from '@shared/ipc-types'
 
 interface InitiativeState {
   entries: InitiativeEntry[]
@@ -14,6 +14,8 @@ interface InitiativeState {
   nextTurn: () => void
   resetCombat: () => void
   sortEntries: () => void
+  addTimer: (entryId: number, timer: EffectTimer) => void
+  removeTimer: (entryId: number, effectId: string) => void
 }
 
 export const useInitiativeStore = create<InitiativeState>()(
@@ -54,6 +56,14 @@ export const useInitiativeStore = create<InitiativeState>()(
         if (nextIdx >= s.entries.length) {
           nextIdx = 0
           s.round += 1
+          // Decrement effect timers at round boundary
+          s.entries.forEach((e) => {
+            if (e.effectTimers) {
+              e.effectTimers = e.effectTimers
+                .map((t) => ({ ...t, roundsLeft: t.roundsLeft - 1 }))
+                .filter((t) => t.roundsLeft > 0)
+            }
+          })
         }
         s.entries[nextIdx].currentTurn = true
       }),
@@ -67,6 +77,26 @@ export const useInitiativeStore = create<InitiativeState>()(
     sortEntries: () =>
       set((s) => {
         s.entries.sort((a, b) => b.roll - a.roll)
+      }),
+
+    addTimer: (entryId, timer) =>
+      set((s) => {
+        const e = s.entries.find((e) => e.id === entryId)
+        if (!e) return
+        if (!e.effectTimers) e.effectTimers = []
+        const existing = e.effectTimers.findIndex((t) => t.effectId === timer.effectId)
+        if (existing >= 0) {
+          e.effectTimers[existing] = timer
+        } else {
+          e.effectTimers.push(timer)
+        }
+      }),
+
+    removeTimer: (entryId, effectId) =>
+      set((s) => {
+        const e = s.entries.find((e) => e.id === entryId)
+        if (!e || !e.effectTimers) return
+        e.effectTimers = e.effectTimers.filter((t) => t.effectId !== effectId)
       }),
   }))
 )

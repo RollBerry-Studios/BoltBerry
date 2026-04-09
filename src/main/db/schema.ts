@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 12
+export const SCHEMA_VERSION = 13
 
 // Migration: v1 → v2 — add explored_bitmap column to fog_state
 export const MIGRATE_V1_TO_V2 = `
@@ -97,6 +97,11 @@ ALTER TABLE initiative ADD COLUMN token_id INTEGER REFERENCES tokens(id) ON DELE
 UPDATE schema_version SET version = 12;
 `
 
+export const MIGRATE_V12_TO_V13 = `
+ALTER TABLE initiative ADD COLUMN effect_timers TEXT;
+UPDATE schema_version SET version = 13;
+`
+
 export const CREATE_TABLES_SQL = `
 -- Campaigns
 CREATE TABLE IF NOT EXISTS campaigns (
@@ -161,7 +166,8 @@ CREATE TABLE IF NOT EXISTS initiative (
   combatant_name  TEXT    NOT NULL,
   roll            INTEGER NOT NULL DEFAULT 0,
   current_turn    INTEGER NOT NULL DEFAULT 0,
-  token_id        INTEGER REFERENCES tokens(id) ON DELETE SET NULL
+  token_id        INTEGER REFERENCES tokens(id) ON DELETE SET NULL,
+  effect_timers   TEXT
 );
 
 -- Notes (campaign-level or map-level)
@@ -222,5 +228,5 @@ CREATE TABLE IF NOT EXISTS schema_version (
 `
 
 export const SEED_SCHEMA_VERSION = `
-INSERT OR IGNORE INTO schema_version (version) VALUES (12);
+INSERT OR IGNORE INTO schema_version (version) VALUES (13);
 `

@@ -194,7 +194,7 @@ interface CampaignExport {
     }>
     fogBitmap: string | null
     exploredBitmap: string | null
-    initiative: Array<{ combatantName: string; roll: number; currentTurn: number; tokenId: number | null }>
+    initiative: Array<{ combatantName: string; roll: number; currentTurn: number; tokenId: number | null; effectTimers: string | null }>
     notes: string
   }>
   campaignNote: string
@@ -258,6 +258,7 @@ function buildCampaignExport(campaignId: number, db: ReturnType<typeof getDb>): 
         exploredBitmap: fog?.explored_bitmap ?? null,
         initiative: initiative.map((i) => ({
           combatantName: i.combatant_name, roll: i.roll, currentTurn: i.current_turn, tokenId: i.token_id ?? null,
+          effectTimers: i.effect_timers ?? null,
         })),
         notes: note,
       }
@@ -349,8 +350,8 @@ function insertCampaignData(data: CampaignExport, db: ReturnType<typeof getDb>):
 
       for (const i of m.initiative) {
         const mappedTokenId = i.tokenId != null ? (tokenIdMap.get(i.tokenId) ?? null) : null
-        db.prepare(`INSERT INTO initiative (map_id, combatant_name, roll, current_turn, token_id) VALUES (?, ?, ?, ?, ?)`)
-          .run(mapId, i.combatantName, i.roll, i.currentTurn, mappedTokenId)
+        db.prepare(`INSERT INTO initiative (map_id, combatant_name, roll, current_turn, token_id, effect_timers) VALUES (?, ?, ?, ?, ?, ?)`)
+          .run(mapId, i.combatantName, i.roll, i.currentTurn, mappedTokenId, i.effectTimers ?? null)
       }
 
       if (m.notes) {

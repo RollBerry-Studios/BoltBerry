@@ -106,6 +106,11 @@ export interface TokenRecord {
   showName: boolean
 }
 
+export interface EffectTimer {
+  effectId: string
+  roundsLeft: number
+}
+
 export interface InitiativeEntry {
   id: number
   mapId: number
@@ -113,6 +118,7 @@ export interface InitiativeEntry {
   roll: number
   currentTurn: boolean
   tokenId: number | null
+  effectTimers: EffectTimer[] | null
 }
 
 export interface NoteRecord {

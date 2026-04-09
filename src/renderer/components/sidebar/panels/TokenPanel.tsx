@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useTokenStore } from '../../../stores/tokenStore'
 import { useUIStore } from '../../../stores/uiStore'
 import { useCampaignStore } from '../../../stores/campaignStore'
@@ -63,6 +63,12 @@ const STATUS_EFFECTS = [
   { id: 'restrained',    icon: '⛓️', label: 'Gefesselt' },
   { id: 'stunned',       icon: '⭐', label: 'Betäubt' },
   { id: 'unconscious',   icon: '💤', label: 'Bewusstlos' },
+  { id: 'advantage',     icon: '▲', label: 'Vorteil' },
+  { id: 'disadvantage',  icon: '▼', label: 'Nachteil' },
+  { id: 'concentrating', icon: '🎯', label: 'Konzentration' },
+  { id: 'blessed',       icon: '✨', label: 'Gesegnet' },
+  { id: 'cursed',        icon: '🔮', label: 'Verflucht' },
+  { id: 'hasted',        icon: '⚡', label: 'Verlangsamt' },
 ]
 
 function SectionHeader({ title, open, onToggle }: { title: string; open: boolean; onToggle: () => void }) {
@@ -559,25 +565,26 @@ export function TokenPanel() {
           {secStatus && (
             <div style={{ paddingBottom: 'var(--sp-2)' }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {STATUS_EFFECTS.map((eff) => {
-                  const active = selected.statusEffects?.includes(eff.id) ?? false
-                  return (
+                {STATUS_EFFECTS.map((eff, idx) => (
+                  <React.Fragment key={eff.id}>
+                    {idx === 16 && (
+                      <div style={{ width: '100%', height: 1, background: 'var(--border-subtle)', margin: '2px 0' }} />
+                    )}
                     <button
-                      key={eff.id}
                       title={eff.label}
                       onClick={() => toggleStatusEffect(selected.id, eff.id, selected.statusEffects)}
                       style={{
                         width: 30, height: 30, borderRadius: 'var(--radius)',
-                        background: active ? 'var(--accent-blue-dim)' : 'var(--bg-overlay)',
-                        border: active ? '1px solid var(--accent-blue)' : '1px solid var(--border-subtle)',
+                        background: selected.statusEffects?.includes(eff.id) ? 'var(--accent-blue-dim)' : 'var(--bg-overlay)',
+                        border: selected.statusEffects?.includes(eff.id) ? '1px solid var(--accent-blue)' : '1px solid var(--border-subtle)',
                         cursor: 'pointer', fontSize: 14,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}
                     >
                       {eff.icon}
                     </button>
-                  )
-                })}
+                  </React.Fragment>
+                ))}
               </div>
               {selected.statusEffects && selected.statusEffects.length > 0 && (
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>

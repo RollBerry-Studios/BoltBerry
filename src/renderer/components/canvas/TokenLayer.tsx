@@ -6,6 +6,7 @@ import { useTokenStore } from '../../stores/tokenStore'
 import { useUIStore } from '../../stores/uiStore'
 import { useMapTransformStore } from '../../stores/mapTransformStore'
 import { useInitiativeStore } from '../../stores/initiativeStore'
+import { useCampaignStore } from '../../stores/campaignStore'
 import type { MapRecord, TokenRecord } from '@shared/ipc-types'
 import { useImage } from '../../hooks/useImage'
 
@@ -18,12 +19,32 @@ function factionColor(faction: string): string {
   }
 }
 
-const STATUS_ICON_MAP: Record<string, string> = {
-  blinded: '🫣', charmed: '💫', dead: '💀', deafened: '🔇',
-  exhausted: '😫', frightened: '😱', grappled: '🤛', incapacitated: '😵',
-  invisible: '👻', paralyzed: '⚡', petrified: '🪨', poisoned: '☠️',
-  prone: '⬇️', restrained: '⛓️', stunned: '⭐', unconscious: '💤',
-}
+const STATUS_EFFECTS = [
+  { id: 'blinded',       icon: '🫣', label: 'Blind' },
+  { id: 'charmed',       icon: '💫', label: 'Bezaubert' },
+  { id: 'dead',          icon: '💀', label: 'Tot' },
+  { id: 'deafened',      icon: '🔇', label: 'Taub' },
+  { id: 'exhausted',     icon: '😫', label: 'Erschöpft' },
+  { id: 'frightened',    icon: '😱', label: 'Verängstigt' },
+  { id: 'grappled',      icon: '🤛', label: 'Gepackt' },
+  { id: 'incapacitated', icon: '😵', label: 'Kampfunfähig' },
+  { id: 'invisible',     icon: '👻', label: 'Unsichtbar' },
+  { id: 'paralyzed',     icon: '⚡', label: 'Gelähmt' },
+  { id: 'petrified',     icon: '🪨', label: 'Versteinert' },
+  { id: 'poisoned',      icon: '☠️', label: 'Vergiftet' },
+  { id: 'prone',         icon: '⬇️', label: 'Liegend' },
+  { id: 'restrained',    icon: '⛓️', label: 'Gefesselt' },
+  { id: 'stunned',       icon: '⭐', label: 'Betäubt' },
+  { id: 'unconscious',   icon: '💤', label: 'Bewusstlos' },
+  { id: 'advantage',     icon: '▲', label: 'Vorteil' },
+  { id: 'disadvantage',  icon: '▼', label: 'Nachteil' },
+  { id: 'concentrating', icon: '🎯', label: 'Konzentration' },
+  { id: 'blessed',       icon: '✨', label: 'Gesegnet' },
+  { id: 'cursed',        icon: '🔮', label: 'Verflucht' },
+  { id: 'hasted',        icon: '⚡', label: 'Verlangsamt' },
+]
+
+const STATUS_ICON_MAP: Record<string, string> = Object.fromEntries(STATUS_EFFECTS.map(e => [e.id, e.icon]))
 
 interface TokenLayerProps {
   map: MapRecord
@@ -50,6 +71,7 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
   const [editingAcId, setEditingAcId] = useState<number | null>(null)
   const [editAc, setEditAc] = useState('')
   const [markerSubmenuId, setMarkerSubmenuId] = useState<number | null>(null)
+  const [submenuType, setSubmenuType] = useState<string | null>(null)
   const [rubberBand, setRubberBand] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
 
   const isDraggable = activeTool === 'select'
@@ -158,6 +180,7 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
   function closeContextMenu() {
     setContextMenu((m) => ({ ...m, visible: false }))
     setMarkerSubmenuId(null)
+    setSubmenuType(null)
   }
 
   function startEdit(token: TokenRecord) {
@@ -314,6 +337,56 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     closeContextMenu()
   }
 
+  async function addToInitiative(token: TokenRecord) {
+    closeContextMenu()
+    const { addEntry } = useInitiativeStore.getState()
+    const activeMapId = useCampaignStore.getState().activeMapId
+    if (!activeMapId || !window.electronAPI) return
+    try {
+      const { entries } = useInitiativeStore.getState()
+      const result = await window.electronAPI.dbRun(
+        'INSERT INTO initiative (map_id, combatant_name, roll, current_turn, token_id) VALUES (?, ?, 0, ?, ?)',
+        [activeMapId, token.name, entries.length === 0 ? 1 : 0, token.id]
+      )
+      addEntry({
+        id: result.lastInsertRowid,
+        mapId: activeMapId,
+        combatantName: token.name,
+        roll: 0,
+        currentTurn: entries.length === 0,
+        tokenId: token.id,
+        effectTimers: null,
+      })
+    } catch (err) {
+      console.error('[TokenLayer] addToInitiative failed:', err)
+    }
+  }
+
+  function toggleAdvantage(token: TokenRecord, isAdvantage: boolean) {
+    closeContextMenu()
+    const effects = token.statusEffects ? [...token.statusEffects] : []
+    const addEffect = isAdvantage ? 'advantage' : 'disadvantage'
+    const removeEffect = isAdvantage ? 'disadvantage' : 'advantage'
+    if (effects.includes(addEffect)) {
+      handleUpdate(token.id, { statusEffects: effects.filter(e => e !== addEffect) })
+    } else {
+      const newEffects = effects.filter(e => e !== removeEffect)
+      newEffects.push(addEffect)
+      handleUpdate(token.id, { statusEffects: newEffects })
+    }
+  }
+
+  function toggleStatusInMenu(token: TokenRecord, statusId: string) {
+    closeContextMenu()
+    const effects = token.statusEffects ? [...token.statusEffects] : []
+    if (effects.includes(statusId)) {
+      handleUpdate(token.id, { statusEffects: effects.filter(e => e !== statusId) })
+    } else {
+      effects.push(statusId)
+      handleUpdate(token.id, { statusEffects: effects })
+    }
+  }
+
   return (
     <>
       <Layer
@@ -438,6 +511,18 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
                     { label: '✏️ Umbenennen', action: () => startEdit(token) },
                     { label: '❤️ HP bearbeiten', action: () => startEditHp(token) },
                     { label: '🛡 AC bearbeiten', action: () => startEditAc(token) },
+                    { label: '⚔️ Zum Kampf hinzufügen', action: () => addToInitiative(token) },
+                    null,
+                    { label: '💚 Heilen (+5 HP)', action: () => { handleUpdate(token.id, { hpCurrent: Math.min((token.hpMax || 0) || 999, (token.hpCurrent || 0) + 5) }); closeContextMenu() } },
+                    { label: '🩸 Schaden (-5 HP)', action: () => { handleUpdate(token.id, { hpCurrent: Math.max(0, (token.hpCurrent || 0) - 5) }); closeContextMenu() } },
+                    { label: '💚 Heilen (+1 HP)', action: () => { handleUpdate(token.id, { hpCurrent: Math.min((token.hpMax || 0) || 999, (token.hpCurrent || 0) + 1) }); closeContextMenu() } },
+                    { label: '🩸 Schaden (-1 HP)', action: () => { handleUpdate(token.id, { hpCurrent: Math.max(0, (token.hpCurrent || 0) - 1) }); closeContextMenu() } },
+                    null,
+                    { label: '⚔️ Zustände', action: null, submenu: true, submenuType: 'status' },
+                    { label: '➕ Vorteil', action: () => toggleAdvantage(token, true) },
+                    { label: '➖ Nachteil', action: () => toggleAdvantage(token, false) },
+                    { label: '🎯 Konzentration', action: () => toggleStatusInMenu(token, 'concentrating') },
+                    null,
                     { label: token.visibleToPlayers ? '🙈 Verstecken' : '👁 Sichtbar machen', action: () => handleToggleVisibility(token) },
                     { label: '📋 Duplizieren', action: () => handleDuplicate(token) },
                     { label: token.locked ? '🔓 Entsperren' : '🔒 Sperren', action: () => handleToggleLock(token) },
@@ -453,8 +538,9 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
                       return <div key={i} style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
                     }
                     if (item.submenu) {
-                      const isSubOpen = markerSubmenuId === token.id
+                      const isSubOpen = markerSubmenuId === token.id && submenuType === item.submenuType
                       const isFaction = item.submenuType === 'faction'
+                      const isStatus = item.submenuType === 'status'
                       const FACTION_OPTIONS = [
                         { value: 'party', label: '🎮 Spieler', color: '#22c55e' },
                         { value: 'enemy', label: '⚔️ Gegner', color: '#ef4444' },
@@ -464,7 +550,15 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
                       return (
                         <div key={i}>
                           <button
-                            onClick={() => setMarkerSubmenuId(isSubOpen ? null : token.id)}
+                            onClick={() => {
+                              if (isSubOpen) {
+                                setMarkerSubmenuId(null)
+                                setSubmenuType(null)
+                              } else {
+                                setMarkerSubmenuId(token.id)
+                                setSubmenuType(item.submenuType)
+                              }
+                            }}
                             style={{
                               display: 'block',
                               width: '100%',
@@ -479,7 +573,7 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
                             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-overlay)')}
                             onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
                           >
-                            {isFaction ? '🏷 Fraktion' : '🏷 Markierung'} {isSubOpen ? '▲' : '▶'}
+                            {isFaction ? '🏷 Fraktion' : isStatus ? '⚔️ Zustände' : '🏷 Markierung'} {isSubOpen ? '▲' : '▶'}
                           </button>
                           {isSubOpen && isFaction && (
                             <div style={{ background: 'var(--bg-elevated)', padding: '2px 0' }}>
@@ -513,7 +607,39 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
                               ))}
                             </div>
                           )}
-                          {isSubOpen && !isFaction && (
+                          {isSubOpen && isStatus && (
+                            <div style={{ background: 'var(--bg-elevated)', padding: '2px 0', maxHeight: 200, overflowY: 'auto' }}>
+                              {STATUS_EFFECTS.map((eff) => {
+                                const isActive = token.statusEffects?.includes(eff.id) ?? false
+                                return (
+                                  <button
+                                    key={eff.id}
+                                    onClick={() => toggleStatusInMenu(token, eff.id)}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 6,
+                                      width: '100%',
+                                      padding: '4px 12px 4px 24px',
+                                      background: isActive ? 'var(--accent-blue-dim)' : 'none',
+                                      border: isActive ? '1px solid var(--accent-blue)' : 'none',
+                                      textAlign: 'left',
+                                      fontSize: 'var(--text-sm)',
+                                      color: 'var(--text-primary)',
+                                      cursor: 'pointer',
+                                    }}
+                                    onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--bg-overlay)' }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? 'var(--accent-blue-dim)' : 'none' }}
+                                  >
+                                    <span style={{ fontSize: 14 }}>{eff.icon}</span>
+                                    {eff.label}
+                                    {isActive && <span style={{ color: 'var(--accent-blue)', marginLeft: 'auto', fontSize: 10 }}>✓</span>}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                          {isSubOpen && !isFaction && !isStatus && (
                             <div style={{ background: 'var(--bg-elevated)', padding: '2px 0' }}>
                               {MARKER_COLORS.map((mc) => (
                                 <button

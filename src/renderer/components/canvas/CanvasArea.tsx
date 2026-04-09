@@ -435,8 +435,8 @@ async function loadMapData(mapId: number, map: MapRecord) {
 
     // Load initiative
     const initRows = await window.electronAPI.dbQuery<{
-      id: number; map_id: number; combatant_name: string; roll: number; current_turn: number; token_id: number | null
-    }>('SELECT id, map_id, combatant_name, roll, current_turn, token_id FROM initiative WHERE map_id = ? ORDER BY roll DESC', [mapId])
+      id: number; map_id: number; combatant_name: string; roll: number; current_turn: number; token_id: number | null; effect_timers: string | null
+    }>('SELECT id, map_id, combatant_name, roll, current_turn, token_id, effect_timers FROM initiative WHERE map_id = ? ORDER BY roll DESC', [mapId])
 
     useInitiativeStore.getState().setEntries(initRows.map((r) => ({
       id: r.id,
@@ -445,6 +445,7 @@ async function loadMapData(mapId: number, map: MapRecord) {
       roll: r.roll,
       currentTurn: Boolean(r.current_turn),
       tokenId: r.token_id ?? null,
+      effectTimers: r.effect_timers ? JSON.parse(r.effect_timers) : null,
     })))
 
     // Sync player: send full state

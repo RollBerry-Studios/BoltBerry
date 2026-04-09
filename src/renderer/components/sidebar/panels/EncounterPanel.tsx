@@ -1,11 +1,18 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useEncounterStore } from '../../../stores/encounterStore'
 import { useCampaignStore } from '../../../stores/campaignStore'
 import { useTokenStore } from '../../../stores/tokenStore'
 import { useInitiativeStore } from '../../../stores/initiativeStore'
 import { useWallStore } from '../../../stores/wallStore'
 import { useUIStore } from '../../../stores/uiStore'
-import type { EncounterTemplate } from '@shared/ipc-types'
+import { useMapTransformStore } from '../../../stores/mapTransformStore'
+import type { EncounterTemplate, FormationType, DifficultyLevel } from '@shared/ipc-types'
+import {
+  getFormationOffsets,
+  applyDifficultyToToken,
+  selectTokensForDifficulty,
+  selectRandomTokens,
+} from '../../../utils/formationLayout'
 
 function broadcastTokensFromPanel() {
   if (useUIStore.getState().sessionMode === 'prep') return
@@ -23,6 +30,22 @@ function broadcastTokensFromPanel() {
   window.electronAPI?.sendTokenUpdate(visible)
 }
 
+const FORMATIONS: { value: FormationType; label: string; icon: string }[] = [
+  { value: 'saved', label: 'Gespeichert', icon: '📌' },
+  { value: 'line', label: 'Linie', icon: '➖' },
+  { value: 'circle', label: 'Kreis', icon: '⭕' },
+  { value: 'cluster', label: 'Haufen', icon: '💥' },
+  { value: 'wing', label: 'Flügel', icon: '🦅' },
+  { value: 'v-formation', label: 'Keil', icon: '🔻' },
+]
+
+const DIFFICULTIES: { value: DifficultyLevel; label: string; color: string }[] = [
+  { value: 'easy', label: 'Leicht', color: '#22c55e' },
+  { value: 'normal', label: 'Normal', color: '#3b82f6' },
+  { value: 'hard', label: 'Schwer', color: '#f59e0b' },
+  { value: 'deadly', label: 'Tödlich', color: '#ef4444' },
+]
+
 export function EncounterPanel() {
   const { encounters, addEncounter, removeEncounter } = useEncounterStore()
   const { activeMapId, activeCampaignId } = useCampaignStore()
@@ -30,8 +53,17 @@ export function EncounterPanel() {
   const walls = useWallStore((s) => s.walls)
   const { entries } = useInitiativeStore()
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [formation, setFormation] = useState<FormationType>('saved')
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>('normal')
+  const [randomVariant, setRandomVariant] = useState(false)
+  const [randomCount, setRandomCount] = useState(0)
 
   const selected = encounters.find((e) => e.id === selectedId) ?? null
+
+  const selectedTemplate = useMemo<EncounterTemplate | null>(() => {
+    if (!selected) return null
+    try { return JSON.parse(selected.templateData) } catch { return null }
+  }, [selected])
 
   async function handleSave() {
     if (!activeCampaignId || !activeMapId) return
@@ -96,26 +128,53 @@ export function EncounterPanel() {
       return
     }
 
-    const tokenIdMap = new Map<number, number>()
+    if (template.tokens.length === 0) return
 
-    for (const t of template.tokens) {
+    const gridSize = useCampaignStore.getState().activeMaps.find((m) => m.id === activeMapId)?.gridSize ?? 50
+
+    const centerToken = template.tokens[0]
+    const centerX = centerToken.x
+    const centerY = centerToken.y
+
+    let spawnTokens = [...template.tokens]
+
+    if (difficulty !== 'normal') {
+      spawnTokens = selectTokensForDifficulty(spawnTokens, difficulty)
+      spawnTokens = spawnTokens.map((t) => applyDifficultyToToken(t, difficulty))
+    }
+
+    if (randomVariant && randomCount > 0 && randomCount < spawnTokens.length) {
+      spawnTokens = selectRandomTokens(spawnTokens, randomCount)
+    }
+
+    const offsets = getFormationOffsets(formation, spawnTokens.length, gridSize)
+    const spawnedTokenIds: { name: string; id: number }[] = []
+
+    for (let i = 0; i < spawnTokens.length; i++) {
+      const t = spawnTokens[i]
+      const offset = offsets[i] ?? { dx: 0, dy: 0 }
+      const spawnX = formation === 'saved' ? t.x : centerX + offset.dx
+      const spawnY = formation === 'saved' ? t.y : centerY + offset.dy
+
       try {
         const result = await window.electronAPI.dbRun(
           'INSERT INTO tokens (map_id, name, image_path, x, y, size, hp_current, hp_max, visible_to_players, rotation, locked, z_index, faction, show_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 1)',
-          [activeMapId, t.name, t.imagePath, t.x, t.y, t.size, t.hpCurrent, t.hpMax, t.visibleToPlayers ? 1 : 0, t.faction]
+          [activeMapId, t.name, t.imagePath, Math.round(spawnX), Math.round(spawnY), t.size, t.hpCurrent, t.hpMax, t.visibleToPlayers ? 1 : 0, t.faction]
         )
+        const newTokenId = result.lastInsertRowid
         useTokenStore.getState().addToken({
-          id: result.lastInsertRowid,
+          id: newTokenId,
           mapId: activeMapId,
           name: t.name,
           imagePath: t.imagePath,
-          x: t.x, y: t.y, size: t.size,
+          x: Math.round(spawnX), y: Math.round(spawnY), size: t.size,
           hpCurrent: t.hpCurrent, hpMax: t.hpMax,
           visibleToPlayers: t.visibleToPlayers,
           rotation: 0, locked: false, zIndex: 0,
           markerColor: null, ac: t.ac, notes: null,
           statusEffects: null, faction: t.faction, showName: true,
         })
+        spawnedTokenIds.push({ name: t.name, id: newTokenId })
       } catch (err) {
         console.error('[EncounterPanel] spawn token failed:', err)
       }
@@ -141,7 +200,10 @@ export function EncounterPanel() {
 
     for (const init of template.initiative) {
       const linkedToken = init.tokenId
-        ? useTokenStore.getState().tokens.find((t) => t.name === template.tokens.find((tt, i) => i === template.tokens.indexOf(tt))?.name)
+        ? spawnedTokenIds.find((st) => {
+            const originalToken = template.tokens.find((t) => t.name === init.combatantName)
+            return originalToken && st.name === originalToken.name
+          }) ?? null
         : null
       try {
         const result = await window.electronAPI.dbRun(
@@ -176,6 +238,34 @@ export function EncounterPanel() {
   }
 
   const mapTokens = tokens.filter((t) => t.faction === 'enemy' || t.faction === 'neutral')
+
+  const spawnTokenCount = useMemo(() => {
+    if (!selectedTemplate) return 0
+    let count = selectedTemplate.tokens.length
+    if (difficulty !== 'normal') {
+      const cfg = difficulty === 'easy' ? { mult: 0.5 }
+        : difficulty === 'hard' ? { mult: 1.5 }
+        : { mult: 2.0 }
+      count = Math.max(1, Math.round(count * cfg.mult))
+    }
+    if (randomVariant && randomCount > 0) {
+      count = Math.min(count, randomCount)
+    }
+    return count
+  }, [selectedTemplate, difficulty, randomVariant, randomCount])
+
+  const previewTokens = useMemo(() => {
+    if (!selectedTemplate) return []
+    let preview = [...selectedTemplate.tokens]
+    if (difficulty !== 'normal') {
+      preview = selectTokensForDifficulty(preview, difficulty)
+      preview = preview.map((t) => applyDifficultyToToken(t, difficulty))
+    }
+    if (randomVariant && randomCount > 0 && randomCount < preview.length) {
+      preview = selectRandomTokens(preview, randomCount)
+    }
+    return preview
+  }, [selectedTemplate, difficulty, randomVariant, randomCount])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -257,56 +347,148 @@ export function EncounterPanel() {
         )}
       </div>
 
-      {selected && (() => {
-        let template: EncounterTemplate | null = null
-        try { template = JSON.parse(selected.templateData) } catch {}
-        if (!template) return null
-        return (
-          <div style={{
-            borderTop: '1px solid var(--border)',
-            padding: 'var(--sp-3) var(--sp-4)',
-            background: 'var(--bg-elevated)',
-            flexShrink: 0,
-            maxHeight: '40%',
-            overflowY: 'auto',
-          }}>
-            <div className="sidebar-section-title" style={{ marginBottom: 'var(--sp-2)' }}>
-              {selected.name} — Vorschau
+      {selected && selectedTemplate && (() => (
+        <div style={{
+          borderTop: '1px solid var(--border)',
+          padding: 'var(--sp-3) var(--sp-4)',
+          background: 'var(--bg-elevated)',
+          flexShrink: 0,
+          maxHeight: '50%',
+          overflowY: 'auto',
+        }}>
+          <div className="sidebar-section-title" style={{ marginBottom: 'var(--sp-2)' }}>
+            {selected.name} — Spawn-Optionen
+          </div>
+
+          <div style={{ marginBottom: 'var(--sp-3)' }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 4 }}>Formation</div>
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              {FORMATIONS.map((f) => (
+                <button
+                  key={f.value}
+                  className="btn"
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    padding: '2px 6px',
+                    background: formation === f.value ? 'var(--accent-blue-dim)' : undefined,
+                    border: formation === f.value ? '1px solid var(--accent-blue)' : undefined,
+                  }}
+                  onClick={() => setFormation(f.value)}
+                  title={f.label}
+                >
+                  {f.icon} {f.label}
+                </button>
+              ))}
             </div>
-            {template.tokens.length > 0 && (
-              <div style={{ marginBottom: 'var(--sp-2)' }}>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 4 }}>Token ({template.tokens.length})</div>
-                {template.tokens.map((t, i) => (
-                  <div key={i} style={{ fontSize: 'var(--text-xs)', display: 'flex', gap: 4, padding: '2px 0' }}>
-                    <span style={{
-                      display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
-                      background: t.faction === 'enemy' ? '#ef4444' : t.faction === 'neutral' ? '#f59e0b' : '#22c55e',
-                      marginTop: 4, flexShrink: 0,
-                    }} />
-                    <span>{t.name}</span>
-                    {t.hpMax > 0 && <span style={{ color: 'var(--text-muted)' }}>HP{t.hpCurrent}/{t.hpMax}</span>}
-                    {t.ac != null && <span style={{ color: 'var(--text-muted)' }}>RK{t.ac}</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-            {template.walls.length > 0 && (
-              <div style={{ marginBottom: 'var(--sp-2)' }}>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                  🧱 {template.walls.length} Wände/Türen
-                </div>
-              </div>
-            )}
-            {template.initiative.length > 0 && (
-              <div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                  ⚔️ {template.initiative.length} Initiative-Einträge
-                </div>
-              </div>
+          </div>
+
+          <div style={{ marginBottom: 'var(--sp-3)' }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 4 }}>
+              Schwierigkeit
+              {difficulty !== 'normal' && (
+                <span style={{ marginLeft: 4, color: DIFFICULTIES.find((d) => d.value === difficulty)?.color }}>
+                  ({DIFFICULTIES.find((d) => d.value === difficulty)?.label})
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {DIFFICULTIES.map((d) => (
+                <button
+                  key={d.value}
+                  className="btn"
+                  style={{
+                    fontSize: 'var(--text-xs)',
+                    padding: '2px 8px',
+                    background: difficulty === d.value ? `${d.color}22` : undefined,
+                    border: difficulty === d.value ? `1px solid ${d.color}` : undefined,
+                    color: difficulty === d.value ? d.color : undefined,
+                  }}
+                  onClick={() => setDifficulty(d.value)}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 'var(--sp-3)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+            <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={randomVariant}
+                onChange={(e) => setRandomVariant(e.target.checked)}
+                style={{ margin: 0 }}
+              />
+              Zufällige Auswahl
+            </label>
+            {randomVariant && (
+              <input
+                type="number"
+                min={1}
+                max={selectedTemplate.tokens.length}
+                value={randomCount || selectedTemplate.tokens.length}
+                onChange={(e) => setRandomCount(Math.max(1, parseInt(e.target.value) || 1))}
+                style={{
+                  width: 40,
+                  fontSize: 'var(--text-xs)',
+                  padding: '1px 4px',
+                  background: 'var(--bg-base)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 3,
+                  color: 'var(--text-primary)',
+                }}
+                title="Anzahl der zu spawnenden Token"
+              />
             )}
           </div>
-        )
-      })()}
+
+          <div style={{ marginBottom: 'var(--sp-2)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+            Wird gespawnt: {spawnTokenCount} Token
+          </div>
+
+          {previewTokens.length > 0 && (
+            <div style={{ marginBottom: 'var(--sp-2)' }}>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 4 }}>
+                Vorschau ({previewTokens.length})
+              </div>
+              {previewTokens.slice(0, 12).map((t, i) => (
+                <div key={i} style={{ fontSize: 'var(--text-xs)', display: 'flex', gap: 4, padding: '1px 0' }}>
+                  <span style={{
+                    display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+                    background: t.faction === 'enemy' ? '#ef4444' : t.faction === 'neutral' ? '#f59e0b' : '#22c55e',
+                    marginTop: 3, flexShrink: 0,
+                  }} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                    {t.name}
+                  </span>
+                  {t.hpMax > 0 && <span style={{ color: 'var(--text-muted)' }}>HP{t.hpCurrent}/{t.hpMax}</span>}
+                  {t.ac != null && <span style={{ color: 'var(--text-muted)' }}>RK{t.ac}</span>}
+                </div>
+              ))}
+              {previewTokens.length > 12 && (
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                  ... und {previewTokens.length - 12} weitere
+                </div>
+              )}
+            </div>
+          )}
+
+          {selectedTemplate.walls.length > 0 && (
+            <div style={{ marginBottom: 'var(--sp-2)' }}>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                🧱 {selectedTemplate.walls.length} Wände/Türen
+              </div>
+            </div>
+          )}
+          {selectedTemplate.initiative.length > 0 && (
+            <div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                ⚔️ {selectedTemplate.initiative.length} Initiative-Einträge
+              </div>
+            </div>
+          )}
+        </div>
+      ))()}
     </div>
   )
 }

@@ -162,6 +162,9 @@ export interface EncounterRecord {
   createdAt: string
 }
 
+export type FormationType = 'saved' | 'line' | 'circle' | 'cluster' | 'wing' | 'v-formation'
+export type DifficultyLevel = 'normal' | 'easy' | 'hard' | 'deadly'
+
 export interface EncounterTemplate {
   tokens: Array<{
     name: string
@@ -194,6 +197,10 @@ export interface EncounterTemplate {
     points: number[]
   }>
   notes: string | null
+  formation?: FormationType
+  difficulty?: DifficultyLevel
+  randomVariant?: boolean
+  randomCount?: number
 }
 
 export interface PlayerTokenState {

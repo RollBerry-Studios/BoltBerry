@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useUIStore, type ActiveTool } from '../../stores/uiStore'
+import { useUIStore, type ActiveTool, type WorkMode } from '../../stores/uiStore'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useMapTransformStore } from '../../stores/mapTransformStore'
 import { MonitorDialog } from '../MonitorDialog'
@@ -145,6 +145,7 @@ export function Toolbar() {
     gridSnap, toggleGridSnap,
     showMinimap, toggleMinimap,
     fogBrushRadius, setFogBrushRadius,
+    workMode, setWorkMode,
   } = useUIStore()
   const { activeCampaignId } = useCampaignStore()
   const [showMonitorDialog, setShowMonitorDialog] = useState(false)
@@ -179,13 +180,46 @@ export function Toolbar() {
     setActiveTool(tool)
   }
 
+  // Filter tools based on work mode
+  const visiblePrimaryTools = PRIMARY_TOOLS.filter((tool) => {
+    if (workMode === 'player-preview') return tool.id === 'pointer'
+    return true
+  })
+  const showFogTools = workMode === 'fog-edit' || workMode === 'prep'
+  const showDrawTools = workMode === 'prep' || workMode === 'play' || workMode === 'combat'
+  const showWallTools = workMode === 'prep' || workMode === 'fog-edit'
+  const showMeasureTools = workMode !== 'player-preview'
+
+  const WORK_MODE_CONFIG: { id: WorkMode; icon: string; label: string; color?: string }[] = [
+    { id: 'prep', icon: '✎', label: 'Vorbereitung' },
+    { id: 'play', icon: '▶', label: 'Spiel' },
+    { id: 'combat', icon: '⚔️', label: 'Kampf' },
+    { id: 'fog-edit', icon: '🌫', label: 'Fog' },
+    { id: 'player-preview', icon: '👁', label: 'Spieler' },
+  ]
+
   return (
     <div className="toolbar">
       <button className="tool-btn" title={t('toolbar.leftSidebar')} onClick={toggleLeftSidebar}>◧</button>
 
+      {/* Work mode selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        {WORK_MODE_CONFIG.map((wm) => (
+          <button
+            key={wm.id}
+            className={clsx('tool-btn', workMode === wm.id && 'active')}
+            title={wm.label}
+            onClick={() => setWorkMode(wm.id)}
+            style={workMode === wm.id ? { color: wm.id === 'combat' ? 'var(--danger)' : wm.id === 'fog-edit' ? '#3b82f6' : wm.id === 'player-preview' ? '#22c55e' : undefined } : undefined}
+          >
+            {wm.icon}
+          </button>
+        ))}
+      </div>
+
       <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
-      {PRIMARY_TOOLS.map((tool) => (
+      {visiblePrimaryTools.map((tool) => (
         <button
           key={tool.id}
           className={clsx('tool-btn', activeTool === tool.id && 'active')}
@@ -198,13 +232,13 @@ export function Toolbar() {
 
       <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px' }} />
 
-      <ToolGroup
+      {showFogTools && (<ToolGroup
         tools={FOG_TOOLS}
         activeTool={activeTool}
         groupIcon="🖌"
         groupLabelKey="toolbar.tools.fogGroup"
         onSelect={handleToolClick}
-      />
+      />)}
 
       {/* Fog brush size slider — shown when a fog brush tool is active */}
       {(activeTool === 'fog-brush' || activeTool === 'fog-brush-cover') && (
@@ -230,29 +264,29 @@ export function Toolbar() {
         </>
       )}
 
-      <ToolGroup
+      {showMeasureTools && (<ToolGroup
         tools={MEASURE_TOOLS}
         activeTool={activeTool}
         groupIcon="📏"
         groupLabelKey="toolbar.tools.measureGroup"
         onSelect={handleToolClick}
-      />
+      />)}
 
-      <ToolGroup
+      {showDrawTools && (<ToolGroup
         tools={DRAW_TOOLS}
         activeTool={activeTool}
         groupIcon="✏️"
         groupLabelKey="toolbar.tools.drawGroup"
         onSelect={handleToolClick}
-      />
+      />)}
 
-      <ToolGroup
+      {showWallTools && (<ToolGroup
         tools={WALL_TOOLS}
         activeTool={activeTool}
         groupIcon="🧱"
         groupLabelKey="toolbar.tools.wallGroup"
         onSelect={handleToolClick}
-      />
+      />)}
 
       <button
         className="tool-btn"

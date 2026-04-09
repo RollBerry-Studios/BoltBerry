@@ -5,6 +5,7 @@ export type ActiveTool = 'select' | 'fog-rect' | 'fog-polygon' | 'fog-cover' | '
 export type SidebarTab = 'tokens' | 'initiative' | 'notes' | 'handouts' | 'overlay' | 'audio' | 'dice' | 'encounters'
 export type AppMode = 'map' | 'atmosphere' | 'blackout'
 export type SessionMode = 'session' | 'prep'
+export type WorkMode = 'prep' | 'play' | 'combat' | 'player-preview' | 'fog-edit'
 export type AppLanguage = 'de' | 'en'
 
 interface UIState {
@@ -27,8 +28,10 @@ interface UIState {
   drawColor: string
   drawWidth: number
   fogBrushRadius: number
+  workMode: WorkMode
 
   setActiveTool: (tool: ActiveTool) => void
+  setWorkMode: (mode: WorkMode) => void
   setSidebarTab: (tab: SidebarTab) => void
   toggleLeftSidebar: () => void
   toggleRightSidebar: () => void
@@ -71,8 +74,35 @@ export const useUIStore = create<UIState>((set) => ({
   drawColor: '#ff6b6b',
   drawWidth: 3,
   fogBrushRadius: 30,
+  workMode: 'prep' as WorkMode,
 
   setActiveTool: (activeTool) => set({ activeTool }),
+  setWorkMode: (workMode: WorkMode) =>
+    set((s) => {
+      const updates: Partial<UIState> = { workMode }
+      switch (workMode) {
+        case 'prep':
+          updates.activeTool = 'select'
+          updates.sidebarTab = 'tokens'
+          break
+        case 'play':
+          updates.activeTool = 'select'
+          updates.sidebarTab = 'initiative'
+          break
+        case 'combat':
+          updates.activeTool = 'select'
+          updates.sidebarTab = 'initiative'
+          break
+        case 'player-preview':
+          updates.activeTool = 'pointer'
+          break
+        case 'fog-edit':
+          updates.activeTool = 'fog-brush'
+          updates.sidebarTab = 'tokens'
+          break
+      }
+      return updates
+    }),
   setSidebarTab: (sidebarTab) => set({ sidebarTab }),
   toggleLeftSidebar: () => set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
   toggleRightSidebar: () => set((s) => ({ rightSidebarOpen: !s.rightSidebarOpen })),

@@ -9,20 +9,30 @@ import { OverlayPanel } from './panels/OverlayPanel'
 import { DiceRoller } from './panels/DiceRoller'
 import { EncounterPanel } from './panels/EncounterPanel'
 
+const ALL_TABS: { id: SidebarTab; labelKey: string; icon: string }[] = [
+  { id: 'tokens',      labelKey: 'sidebar.right.tabTokens',      icon: '⬤' },
+  { id: 'initiative',  labelKey: 'sidebar.right.tabInitiative',  icon: '⚔️' },
+  { id: 'encounters',  labelKey: 'sidebar.right.tabEncounters',  icon: '👾' },
+  { id: 'notes',       labelKey: 'sidebar.right.tabNotes',       icon: '📝' },
+  { id: 'handouts',    labelKey: 'sidebar.right.tabHandouts',    icon: '📜' },
+  { id: 'overlay',     labelKey: 'sidebar.right.tabOverlay',     icon: '✦' },
+  { id: 'audio',       labelKey: 'sidebar.right.tabAudio',       icon: '🎵' },
+  { id: 'dice',        labelKey: 'sidebar.right.tabDice',        icon: '🎲' },
+]
+
 export function RightSidebar() {
   const { t } = useTranslation()
-  const { sidebarTab, setSidebarTab } = useUIStore()
+  const { sidebarTab, setSidebarTab, workMode } = useUIStore()
 
-  const TABS: { id: SidebarTab; labelKey: string; icon: string }[] = [
-    { id: 'tokens',      labelKey: 'sidebar.right.tabTokens',      icon: '⬤' },
-    { id: 'initiative',  labelKey: 'sidebar.right.tabInitiative',  icon: '⚔️' },
-    { id: 'encounters',  labelKey: 'sidebar.right.tabEncounters',  icon: '👾' },
-    { id: 'notes',       labelKey: 'sidebar.right.tabNotes',       icon: '📝' },
-    { id: 'handouts',    labelKey: 'sidebar.right.tabHandouts',    icon: '📜' },
-    { id: 'overlay',     labelKey: 'sidebar.right.tabOverlay',     icon: '✦' },
-    { id: 'audio',       labelKey: 'sidebar.right.tabAudio',       icon: '🎵' },
-    { id: 'dice',        labelKey: 'sidebar.right.tabDice',        icon: '🎲' },
-  ]
+  const visibleTabs: typeof ALL_TABS = workMode === 'player-preview'
+    ? []
+    : workMode === 'combat'
+      ? ALL_TABS.filter((t) => t.id === 'tokens' || t.id === 'initiative')
+      : workMode === 'fog-edit'
+        ? ALL_TABS.filter((t) => t.id === 'tokens')
+        : ALL_TABS
+
+  if (workMode === 'player-preview') return null
 
   return (
     <div className="sidebar sidebar-right">
@@ -32,7 +42,7 @@ export function RightSidebar() {
         background: 'var(--bg-surface)',
         flexShrink: 0,
       }}>
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             title={t(tab.labelKey)}

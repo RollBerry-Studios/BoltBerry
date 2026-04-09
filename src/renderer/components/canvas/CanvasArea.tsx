@@ -50,6 +50,7 @@ export function CanvasArea() {
   const appMode = useUIStore((s) => s.appMode)
   const atmosphereImagePath = useUIStore((s) => s.atmosphereImagePath)
   const showMinimap = useUIStore((s) => s.showMinimap)
+  const workMode = useUIStore((s) => s.workMode)
   const activeMapId = useCampaignStore((s) => s.activeMapId)
   const activeMaps = useCampaignStore((s) => s.activeMaps)
   const activeMap = useMemo(() => activeMaps.find((m) => m.id === activeMapId) ?? null, [activeMaps, activeMapId])
@@ -375,6 +376,23 @@ export function CanvasArea() {
             background: 'rgba(13,16,21,0.85)', padding: '12px 24px',
             borderRadius: 8,
           }}>Token hier ablegen</div>
+        </div>
+      )}
+
+      {/* Player preview mode banner */}
+      {workMode === 'player-preview' && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, zIndex: 200,
+          background: '#22c55e', color: '#fff', textAlign: 'center',
+          fontSize: 13, fontWeight: 700, padding: '6px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+        }}>
+          👁 Spieler-Vorschau — Du siehst, was die Spieler sehen
+          <button
+            style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 4, color: '#fff', padding: '2px 10px', cursor: 'pointer', fontSize: 12, marginLeft: 12 }}
+            onClick={() => useUIStore.getState().setWorkMode('play')}
+          >Zurück zum Spiel</button>
         </div>
       )}
 

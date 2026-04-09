@@ -7,6 +7,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { useMapTransformStore } from '../../stores/mapTransformStore'
 import { useInitiativeStore } from '../../stores/initiativeStore'
 import { useCampaignStore } from '../../stores/campaignStore'
+import { useUndoStore, nextCommandId } from '../../stores/undoStore'
 import type { MapRecord, TokenRecord } from '@shared/ipc-types'
 import { useImage } from '../../hooks/useImage'
 
@@ -97,9 +98,17 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     const dmx = dx / scale
     const dmy = dy / scale
 
-    const shouldSnap = gridSnap && map.gridType !== 'none'
+    if (Math.abs(dmx) < 0.5 && Math.abs(dmy) < 0.5) return
 
+    const shouldSnap = gridSnap && map.gridType !== 'none'
     const idsToMove = selectedTokenIds.includes(token.id) ? selectedTokenIds : [token.id]
+
+    const oldPositions = idsToMove.map((id) => {
+      const t = tokens.find((tok) => tok.id === id)
+      return t ? { id, x: t.x, y: t.y } : null
+    }).filter(Boolean) as Array<{ id: number; x: number; y: number }>
+
+    const newPositions: Array<{ id: number; x: number; y: number }> = []
 
     for (const id of idsToMove) {
       const t = tokens.find((tok) => tok.id === id)
@@ -111,6 +120,7 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
         newY = Math.round(newY / map.gridSize) * map.gridSize
       }
       moveToken(id, newX, newY)
+      newPositions.push({ id, x: newX, y: newY })
       try {
         await window.electronAPI?.dbRun('UPDATE tokens SET x = ?, y = ? WHERE id = ?', [newX, newY, id])
       } catch (err) {
@@ -125,6 +135,25 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     }
 
     broadcastTokens(useTokenStore.getState().tokens)
+
+    useUndoStore.getState().pushCommand({
+      id: nextCommandId(),
+      label: `Move ${idsToMove.length === 1 ? 'token' : 'tokens'}`,
+      undo: async () => {
+        for (const pos of oldPositions) {
+          useTokenStore.getState().moveToken(pos.id, pos.x, pos.y)
+          await window.electronAPI?.dbRun('UPDATE tokens SET x = ?, y = ? WHERE id = ?', [pos.x, pos.y, pos.id])
+        }
+        broadcastTokens(useTokenStore.getState().tokens)
+      },
+      redo: async () => {
+        for (const pos of newPositions) {
+          useTokenStore.getState().moveToken(pos.id, pos.x, pos.y)
+          await window.electronAPI?.dbRun('UPDATE tokens SET x = ?, y = ? WHERE id = ?', [pos.x, pos.y, pos.id])
+        }
+        broadcastTokens(useTokenStore.getState().tokens)
+      },
+    })
   }
 
   function handleContextMenu(token: TokenRecord, e: Konva.KonvaEventObject<MouseEvent>) {

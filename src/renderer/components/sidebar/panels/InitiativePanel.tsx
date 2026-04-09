@@ -4,6 +4,7 @@ import { useInitiativeStore } from '../../../stores/initiativeStore'
 import { useCampaignStore } from '../../../stores/campaignStore'
 import { useUIStore } from '../../../stores/uiStore'
 import { useTokenStore } from '../../../stores/tokenStore'
+import { useUndoStore, nextCommandId } from '../../../stores/undoStore'
 
 const FACTION_COLORS: Record<string, string> = {
   enemy: '#ef4444',
@@ -49,6 +50,12 @@ function broadcastTokensFromInitiative() {
 
 async function quickTokenUpdate(tokenId: number, updates: Record<string, any>) {
   const { updateToken } = useTokenStore.getState()
+  const token = useTokenStore.getState().tokens.find((t) => t.id === tokenId)
+  if (!token) return
+  const oldValues: Record<string, any> = {}
+  for (const key of Object.keys(updates)) {
+    oldValues[key] = (token as any)[key]
+  }
   updateToken(tokenId, updates)
   const cols = Object.keys(updates).map((k) => {
     const col = k.replace(/([A-Z])/g, '_$1').toLowerCase()
@@ -57,6 +64,25 @@ async function quickTokenUpdate(tokenId: number, updates: Record<string, any>) {
   const vals = Object.values(updates).map((v) => typeof v === 'boolean' ? (v ? 1 : 0) : v)
   await window.electronAPI?.dbRun(`UPDATE tokens SET ${cols} WHERE id = ?`, [...vals, tokenId])
   broadcastTokensFromInitiative()
+  useUndoStore.getState().pushCommand({
+    id: nextCommandId(),
+    label: `Token ${Object.keys(updates).join(', ')}`,
+    undo: async () => {
+      updateToken(tokenId, oldValues)
+      const undoCols = Object.keys(oldValues).map((k) => {
+        const col = k.replace(/([A-Z])/g, '_$1').toLowerCase()
+        return `${col} = ?`
+      }).join(', ')
+      const undoVals = Object.values(oldValues).map((v) => typeof v === 'boolean' ? (v ? 1 : 0) : v)
+      await window.electronAPI?.dbRun(`UPDATE tokens SET ${undoCols} WHERE id = ?`, [...undoVals, tokenId])
+      broadcastTokensFromInitiative()
+    },
+    redo: async () => {
+      updateToken(tokenId, updates)
+      await window.electronAPI?.dbRun(`UPDATE tokens SET ${cols} WHERE id = ?`, [...vals, tokenId])
+      broadcastTokensFromInitiative()
+    },
+  })
 }
 
 export function InitiativePanel() {

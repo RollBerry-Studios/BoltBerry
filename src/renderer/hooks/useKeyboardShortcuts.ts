@@ -5,6 +5,7 @@ import { useInitiativeStore } from '../stores/initiativeStore'
 import { useTokenStore } from '../stores/tokenStore'
 import { useCampaignStore } from '../stores/campaignStore'
 import { useMapTransformStore } from '../stores/mapTransformStore'
+import { useUndoStore } from '../stores/undoStore'
 
 export function useKeyboardShortcuts() {
   useEffect(() => {
@@ -18,16 +19,9 @@ export function useKeyboardShortcuts() {
           case 'z':
             e.preventDefault()
             if (e.shiftKey) {
-              // Redo fog
-              document.getElementById('root')?.dispatchEvent(
-                new CustomEvent('fog:undo-redo', { detail: { type: 'redo' } })
-              )
+              useUndoStore.getState().redo()
             } else {
-              // Undo fog + token moves
-              document.getElementById('root')?.dispatchEvent(
-                new CustomEvent('fog:undo-redo', { detail: { type: 'undo' } })
-              )
-              useTokenStore.getState().undoLastMove()
+              useUndoStore.getState().undo()
             }
             return
           case 's':

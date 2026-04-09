@@ -12,7 +12,7 @@ function makeToken(id: number, x = 0, y = 0): TokenRecord {
 }
 
 beforeEach(() => {
-  useTokenStore.setState({ tokens: [], positionHistory: [] })
+  useTokenStore.setState({ tokens: [] })
 })
 
 describe('tokenStore', () => {
@@ -40,39 +40,13 @@ describe('tokenStore', () => {
     const t = useTokenStore.getState().tokens[0]
     expect(t.x).toBe(50)
     expect(t.hpCurrent).toBe(5)
-    expect(t.y).toBe(20) // unchanged
+    expect(t.y).toBe(20)
   })
 
-  it('moveToken saves snapshot and updates position', () => {
+  it('moveToken updates position', () => {
     useTokenStore.getState().setTokens([makeToken(1, 10, 20), makeToken(2, 30, 40)])
     useTokenStore.getState().moveToken(1, 100, 200)
     const state = useTokenStore.getState()
     expect(state.tokens.find((t) => t.id === 1)?.x).toBe(100)
-    expect(state.positionHistory).toHaveLength(1)
-    expect(state.positionHistory[0].find((p) => p.id === 1)).toMatchObject({ x: 10, y: 20 })
-  })
-
-  it('undoLastMove restores previous positions', () => {
-    useTokenStore.getState().setTokens([makeToken(1, 10, 20)])
-    useTokenStore.getState().moveToken(1, 100, 200)
-    useTokenStore.getState().undoLastMove()
-    const t = useTokenStore.getState().tokens[0]
-    expect(t.x).toBe(10)
-    expect(t.y).toBe(20)
-    expect(useTokenStore.getState().positionHistory).toHaveLength(0)
-  })
-
-  it('undoLastMove is a no-op with empty history', () => {
-    useTokenStore.getState().setTokens([makeToken(1, 5, 5)])
-    useTokenStore.getState().undoLastMove()
-    expect(useTokenStore.getState().tokens[0].x).toBe(5)
-  })
-
-  it('positionHistory is capped at 20 entries', () => {
-    useTokenStore.getState().setTokens([makeToken(1)])
-    for (let i = 0; i < 25; i++) {
-      useTokenStore.getState().moveToken(1, i, i)
-    }
-    expect(useTokenStore.getState().positionHistory).toHaveLength(20)
   })
 })

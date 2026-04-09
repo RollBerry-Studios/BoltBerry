@@ -6,6 +6,7 @@ import { useUIStore, type ActiveTool } from '../../stores/uiStore'
 import { useMapTransformStore, screenToMapPure, mapToScreenPure } from '../../stores/mapTransformStore'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useTokenStore } from '../../stores/tokenStore'
+import { useUndoStore, nextCommandId } from '../../stores/undoStore'
 
 interface FogLayerProps {
   mapId: number
@@ -30,7 +31,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
   const [dragRect, setDragRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
   const [brushPos, setBrushPos] = useState<{ x: number; y: number } | null>(null)
 
-  const { pushOperation, pendingPoints, addPendingPoint, clearPendingPoints, undo, redo } = useFogStore()
+  const { pendingPoints, addPendingPoint, clearPendingPoints } = useFogStore()
   const scale = useMapTransformStore((s) => s.scale)
   const offsetX = useMapTransformStore((s) => s.offsetX)
   const offsetY = useMapTransformStore((s) => s.offsetY)
@@ -127,6 +128,28 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     saveFogToDb(mapId, explored, covered)
   }, [mapId, refreshDisplay])
 
+  // ── Push fog operation to global undo stack ────────────────────────────────
+  const pushFogCommand = useCallback((op: FogOperation) => {
+    const fogStore = useFogStore.getState()
+    fogStore.pushOperation(op)
+    applyOp(op)
+    useUndoStore.getState().pushCommand({
+      id: nextCommandId(),
+      label: `Fog ${op.type}`,
+      undo: () => {
+        const fs = useFogStore.getState()
+        fs.undo()
+        rebuildFog()
+      },
+      redo: () => {
+        const fs = useFogStore.getState()
+        fs.redo()
+        const lastOp = fs.history[fs.history.length - 1]
+        if (lastOp) applyOp(lastOp)
+      },
+    })
+  }, [applyOp, rebuildFog])
+
   // ── Fog quick actions (reveal all, cover all, reset) ─────────────────────
   useEffect(() => {
     const el = document.getElementById('root')
@@ -142,7 +165,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
         ec.clearRect(0, 0, explored.width, explored.height)
         cc.clearRect(0, 0, covered.width, covered.height)
         const fullOp: FogOperation = { type: 'reveal', shape: 'rect', points: [0, 0, explored.width, explored.height] }
-        pushOperation(fullOp)
+        pushFogCommand(fullOp)
         refreshDisplay()
         saveFogToDb(mapId, explored, covered)
         sendFogDelta(fullOp)
@@ -150,7 +173,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
         cc.fillStyle = 'rgba(0,0,0,0.45)'
         cc.fillRect(0, 0, covered.width, covered.height)
         const fullOp: FogOperation = { type: 'cover', shape: 'rect', points: [0, 0, covered.width, covered.height] }
-        pushOperation(fullOp)
+        pushFogCommand(fullOp)
         refreshDisplay()
         saveFogToDb(mapId, explored, covered)
         sendFogDelta(fullOp)
@@ -173,7 +196,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
             points: [token.x + (token.size * gridSizeProp) / 2, token.y + (token.size * gridSizeProp) / 2, revealRadius],
           }
           applyOpToCtxPair(ec, cc, op)
-          pushOperation(op)
+          pushFogCommand(op)
         }
         refreshDisplay()
         saveFogToDb(mapId, explored, covered)
@@ -181,26 +204,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     }
     el?.addEventListener('fog:action', handler)
     return () => el?.removeEventListener('fog:action', handler)
-  }, [mapId, activeMapId, pushOperation, refreshDisplay])
-
-  // ── Undo/redo handler ──────────────────────────────────────────────────────
-  useEffect(() => {
-    const el = document.getElementById('root')
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { type: 'undo' | 'redo' }
-      if (detail.type === 'undo') {
-        undo()
-        rebuildFog()
-      } else {
-        const fogStore = useFogStore.getState()
-        if (fogStore.history.length === 0) return
-        redo()
-        applyOp(fogStore.history.at(-1)!)
-      }
-    }
-    el?.addEventListener('fog:undo-redo', handler)
-    return () => el?.removeEventListener('fog:undo-redo', handler)
-  }, [undo, redo, rebuildFog, applyOp])
+  }, [mapId, activeMapId, pushFogCommand, refreshDisplay])
 
   // ── Pointer position in MAP coordinates ──────────────────────────────────
   function getMapPos(): { x: number; y: number } | null {
@@ -316,7 +320,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
           const mpos = screenToMapPure(pos.x, pos.y, scale, offsetX, offsetY)
           cx = mpos.x; cy = mpos.y
         }
-        pushOperation({ type: isReveal ? 'reveal' : 'cover', shape: 'circle', points: [cx, cy, r] })
+        pushFogCommand({ type: isReveal ? 'reveal' : 'cover', shape: 'circle', points: [cx, cy, r] })
         saveFogToDb(mapId, explored, covered)
       }
       return
@@ -332,7 +336,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
       points: [startMapPos.current.x, startMapPos.current.y, pos.x, pos.y],
     }
     applyOp(op)
-    pushOperation(op)
+    pushFogCommand(op)
   }
 
   function handleDblClick(_e: Konva.KonvaEventObject<MouseEvent>) {
@@ -343,7 +347,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
       points: [...pendingPoints],
     }
     applyOp(op)
-    pushOperation(op)
+    pushFogCommand(op)
     clearPendingPoints()
   }
 

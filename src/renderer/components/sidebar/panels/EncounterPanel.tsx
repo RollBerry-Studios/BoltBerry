@@ -244,10 +244,17 @@ export function EncounterPanel() {
   }
 
   async function handleDelete(id: number) {
+    if (!window.electronAPI) return
+    const enc = encounters.find((e) => e.id === id)
+    const confirmed = await window.electronAPI.confirmDialog(
+      `Begegnung "${enc?.name ?? ''}" löschen?`,
+      'Diese Aktion kann nicht rükgängig gemacht werden.'
+    )
+    if (!confirmed) return
     removeEncounter(id)
     if (selectedId === id) setSelectedId(null)
     try {
-      await window.electronAPI?.dbRun('DELETE FROM encounters WHERE id = ?', [id])
+      await window.electronAPI.dbRun('DELETE FROM encounters WHERE id = ?', [id])
     } catch (err) {
       console.error('[EncounterPanel] delete failed:', err)
     }

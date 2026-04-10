@@ -45,7 +45,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
   const isReveal = activeTool === 'fog-rect' || activeTool === 'fog-polygon' || activeTool === 'fog-brush'
   const isBrush = activeTool === 'fog-brush' || activeTool === 'fog-brush-cover'
 
-  // ── Initialize canvases when map/dimensions change ────────────────────────
+  // ── Initialize canvases when map/dimensions change ────────────────────
   useEffect(() => {
     if (imgW === 0 || imgH === 0) return
 
@@ -65,7 +65,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     loadFogFromDb(mapId, explored, covered).then(() => refreshDisplay())
   }, [mapId, imgW, imgH])
 
-  // ── Create/update Konva.Image nodes ───────────────────────────────────────
+  // ── Create/update Konva.Image nodes ──────────────────────────────────────
   const refreshDisplay = useCallback(() => {
     const explored = exploredCanvasRef.current
     const covered  = coveredCanvasRef.current
@@ -90,14 +90,14 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     const kC = kImgCoveredRef.current
     kC.image(covered)
     kC.x(offsetX); kC.y(offsetY)
-    kC.width(imgW * scale); kC.height(imgW * scale)
+    kC.width(imgW * scale); kC.height(imgH * scale)
 
     layer.batchDraw()
   }, [offsetX, offsetY, imgW, imgH, scale])
 
   useEffect(() => { refreshDisplay() }, [refreshDisplay])
 
-  // ── Apply a fog operation ─────────────────────────────────────────────────
+  // ── Apply a fog operation ─────────────────────────────────────────────
   const applyOp = useCallback((op: FogOperation) => {
     const explored = exploredCanvasRef.current
     const covered  = coveredCanvasRef.current
@@ -108,7 +108,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     sendFogDelta(op)
   }, [mapId, refreshDisplay])
 
-  // ── Rebuild from scratch (undo/redo) ─────────────────────────────────────
+  // ── Rebuild from scratch (undo/redo) ─────────────────────────────────
   const rebuildFog = useCallback(() => {
     const explored = exploredCanvasRef.current
     const covered  = coveredCanvasRef.current
@@ -128,7 +128,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     saveFogToDb(mapId, explored, covered)
   }, [mapId, refreshDisplay])
 
-  // ── Push fog operation to global undo stack ────────────────────────────────
+  // ── Push fog operation to global undo stack ──────────────────────────────
   const pushFogCommand = useCallback((op: FogOperation) => {
     const fogStore = useFogStore.getState()
     fogStore.pushOperation(op)
@@ -150,7 +150,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     })
   }, [applyOp, rebuildFog])
 
-  // ── Fog quick actions (reveal all, cover all, reset) ─────────────────────
+  // ── Fog quick actions (reveal all, cover all, reset) ───────────────────
   useEffect(() => {
     const el = document.getElementById('root')
     const handler = (e: Event) => {
@@ -162,21 +162,11 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
       const cc = covered.getContext('2d')!
 
       if (detail.type === 'revealAll') {
-        ec.clearRect(0, 0, explored.width, explored.height)
-        cc.clearRect(0, 0, covered.width, covered.height)
         const fullOp: FogOperation = { type: 'reveal', shape: 'rect', points: [0, 0, explored.width, explored.height] }
         pushFogCommand(fullOp)
-        refreshDisplay()
-        saveFogToDb(mapId, explored, covered)
-        sendFogDelta(fullOp)
       } else if (detail.type === 'coverAll') {
-        cc.fillStyle = 'rgba(0,0,0,0.45)'
-        cc.fillRect(0, 0, covered.width, covered.height)
         const fullOp: FogOperation = { type: 'cover', shape: 'rect', points: [0, 0, covered.width, covered.height] }
         pushFogCommand(fullOp)
-        refreshDisplay()
-        saveFogToDb(mapId, explored, covered)
-        sendFogDelta(fullOp)
       } else if (detail.type === 'resetExplored') {
         ec.clearRect(0, 0, explored.width, explored.height)
         cc.clearRect(0, 0, covered.width, covered.height)
@@ -195,18 +185,15 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
             shape: 'circle',
             points: [token.x + (token.size * gridSizeProp) / 2, token.y + (token.size * gridSizeProp) / 2, revealRadius],
           }
-          applyOpToCtxPair(ec, cc, op)
           pushFogCommand(op)
         }
-        refreshDisplay()
-        saveFogToDb(mapId, explored, covered)
       }
     }
     el?.addEventListener('fog:action', handler)
     return () => el?.removeEventListener('fog:action', handler)
   }, [mapId, activeMapId, pushFogCommand, refreshDisplay])
 
-  // ── Pointer position in MAP coordinates ──────────────────────────────────
+  // ── Pointer position in MAP coordinates ──────────────────────────────
   function getMapPos(): { x: number; y: number } | null {
     const stage = stageRef.current
     if (!stage) return null
@@ -215,7 +202,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     return screenToMapPure(pos.x, pos.y, scale, offsetX, offsetY)
   }
 
-  // ── Brush stroke with interpolation ────────────────────────────────────────
+  // ── Brush stroke with interpolation ──────────────────────────────────────
   const lastBrushPos = useRef<{ x: number; y: number } | null>(null)
 
   function brushAt(x: number, y: number) {
@@ -263,7 +250,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     }
   }
 
-  // ── Mouse handlers ────────────────────────────────────────────────────────
+  // ── Mouse handlers ──────────────────────────────────────────────────
   function handleMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
     if (!isFogActive || e.evt.button !== 0 || e.evt.altKey) return
     const pos = getMapPos()
@@ -335,7 +322,6 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
       shape: 'rect',
       points: [startMapPos.current.x, startMapPos.current.y, pos.x, pos.y],
     }
-    applyOp(op)
     pushFogCommand(op)
   }
 
@@ -346,7 +332,6 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
       shape: 'polygon',
       points: [...pendingPoints],
     }
-    applyOp(op)
     pushFogCommand(op)
     clearPendingPoints()
   }
@@ -454,7 +439,7 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
   )
 }
 
-// ── Fog persistence helpers ───────────────────────────────────────────────────
+// ── Fog persistence helpers ────────────────────────────────────────────────
 
 async function loadFogFromDb(
   mapId: number,
@@ -529,7 +514,7 @@ function sendFogDelta(op: FogOperation) {
   })
 }
 
-// ── Pure canvas draw helpers — exported for PlayerApp ────────────────────────
+// ── Pure canvas draw helpers — exported for PlayerApp ──────────────────────────
 
 export function applyOpToCtxPair(
   exploredCtx: CanvasRenderingContext2D,

@@ -61,6 +61,14 @@ export function CanvasArea() {
   const activeMap = useMemo(() => activeMaps.find((m) => m.id === activeMapId) ?? null, [activeMaps, activeMapId])
   const atmosphereUrl = useImageUrl(atmosphereImagePath)
 
+  // Set playerConnected=false when the player window is closed
+  useEffect(() => {
+    const unsub = window.electronAPI?.onPlayerWindowClosed(() => {
+      useUIStore.getState().setPlayerConnected(false)
+    })
+    return () => unsub?.()
+  }, [])
+
   // Continuous camera sync to player when follow mode is on
   useEffect(() => {
     const unsub = useMapTransformStore.subscribe((state, prevState) => {
@@ -111,7 +119,13 @@ export function CanvasArea() {
       const file = e.dataTransfer.files[0]
       if (!file.type.startsWith('image/')) return
       const arrayBuf = await file.arrayBuffer()
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuf)))
+      const uint8 = new Uint8Array(arrayBuf)
+      let binary = ''
+      const chunkSize = 8192
+      for (let i = 0; i < uint8.length; i += chunkSize) {
+        binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize))
+      }
+      const base64 = btoa(binary)
       const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png'
       const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'webp' ? 'image/webp' : 'image/png'
       const dataUrl = `data:${mimeType};base64,${base64}`

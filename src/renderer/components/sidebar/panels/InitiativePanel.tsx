@@ -184,10 +184,16 @@ export function InitiativePanel() {
     }
   }
 
-  function handleReset() {
+  async function handleReset() {
+    if (!window.electronAPI) return
+    const confirmed = await window.electronAPI.confirmDialog(
+      'Kampf zurücksetzen?',
+      'Alle Initiative-Einträge werden gelöscht. Diese Aktion kann nicht rükgängig gemacht werden.'
+    )
+    if (!confirmed) return
     resetCombat()
     broadcastInitiative()
-    if (activeMapId && window.electronAPI) {
+    if (activeMapId) {
       window.electronAPI.dbRun('DELETE FROM initiative WHERE map_id = ?', [activeMapId]).catch((err: unknown) => {
         console.error('[InitiativePanel] reset delete failed:', err)
       })

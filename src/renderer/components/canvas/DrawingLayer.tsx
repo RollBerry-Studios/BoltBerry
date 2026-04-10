@@ -32,7 +32,9 @@ export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
   const [loadedMapId, setLoadedMapId] = useState<number | null>(null)
 
   useEffect(() => {
-    loadDrawings(mapId).then(setDrawings)
+    loadDrawings(mapId)
+      .then(setDrawings)
+      .catch((err) => console.error('[DrawingLayer] loadDrawings failed:', err))
     setLoadedMapId(mapId)
   }, [mapId])
 

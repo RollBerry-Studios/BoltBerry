@@ -33,6 +33,8 @@ export function RoomLayer({ mapId, stageRef, gridSize }: RoomLayerProps) {
   const [contextMenu, setContextMenu] = useState<{ roomId: number; x: number; y: number } | null>(null)
 
   const isRoomTool = activeTool === 'room'
+  const offsetX = useMapTransformStore((s) => s.offsetX)
+  const offsetY = useMapTransformStore((s) => s.offsetY)
 
   const parsedRooms = useMemo(() => {
     return rooms.map((room) => {
@@ -158,24 +160,28 @@ export function RoomLayer({ mapId, stageRef, gridSize }: RoomLayerProps) {
         const overrideFill = room.color ? `${room.color}14` : colors.fill
         const overrideStroke = room.color ? `${room.color}99` : colors.stroke
 
+        const screenPoints = pts.flatMap((p) => [p.x * scale + offsetX, p.y * scale + offsetY])
+        const labelX = (pts.reduce((s, p) => s + p.x, 0) / pts.length) * scale + offsetX
+        const labelY = (pts.reduce((s, p) => s + p.y, 0) / pts.length) * scale + offsetY
+
         return (
           <Group key={room.id} onClick={() => handleRoomClick(room.id)} onContextMenu={(e) => handleRoomRightClick(e, room.id)}>
             <Line
-              points={flatPoints}
+              points={screenPoints}
               closed
               fill={overrideFill}
               stroke={isSelected ? '#ffffff' : overrideStroke}
-              strokeWidth={isSelected ? 2 / scale : 1.5 / scale}
-              dash={isSelected ? undefined : [6 / scale, 4 / scale]}
+              strokeWidth={isSelected ? 2 : 1.5}
+              dash={isSelected ? undefined : [6, 4]}
             />
             <Text
               text={room.name}
-              x={pts.reduce((s, p) => s + p.x, 0) / pts.length}
-              y={pts.reduce((s, p) => s + p.y, 0) / pts.length}
-              fontSize={14 / scale}
+              x={labelX}
+              y={labelY}
+              fontSize={14}
               fill={room.color || '#94a3b8'}
               fontStyle="bold"
-              offsetY={7 / scale}
+              offsetY={7}
               align="center"
             />
           </Group>
@@ -185,26 +191,26 @@ export function RoomLayer({ mapId, stageRef, gridSize }: RoomLayerProps) {
       {drawingPoints.length > 0 && (
         <Line
           points={[
-            ...drawingPoints.flatMap((p) => [p.x, p.y]),
-            ...(previewPoint ? [previewPoint.x, previewPoint.y] : []),
-            drawingPoints[0].x, drawingPoints[0].y,
+            ...drawingPoints.flatMap((p) => [p.x * scale + offsetX, p.y * scale + offsetY]),
+            ...(previewPoint ? [previewPoint.x * scale + offsetX, previewPoint.y * scale + offsetY] : []),
+            drawingPoints[0].x * scale + offsetX, drawingPoints[0].y * scale + offsetY,
           ]}
           closed={false}
           stroke="#f59e0b"
-          strokeWidth={2 / scale}
-          dash={[4 / scale, 4 / scale]}
+          strokeWidth={2}
+          dash={[4, 4]}
         />
       )}
 
       {drawingPoints.map((p, i) => (
         <Circle
           key={`dp-${i}`}
-          x={p.x}
-          y={p.y}
-          radius={4 / scale}
+          x={p.x * scale + offsetX}
+          y={p.y * scale + offsetY}
+          radius={4}
           fill="#f59e0b"
           stroke="#fff"
-          strokeWidth={1 / scale}
+          strokeWidth={1}
         />
       ))}
     </Layer>

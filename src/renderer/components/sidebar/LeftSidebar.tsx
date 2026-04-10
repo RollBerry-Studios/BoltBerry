@@ -276,7 +276,7 @@ export function LeftSidebar() {
 
   return (
     <div className="sidebar sidebar-left">
-      {/* ── Tab bar ──────────────────────────────────────────────────────── */}
+      {/* ── Tab bar ────────────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', flexShrink: 0 }}>
         {([
           ['maps', '🗺️', t('sidebar.left.tabMaps')],
@@ -305,7 +305,7 @@ export function LeftSidebar() {
       {tab === 'settings' && <SettingsPanel />}
 
       {tab === 'maps' && <>
-      {/* ── Map list ──────────────────────────────────────────────────────── */}
+      {/* ── Map list ─────────────────────────────────────────────────────────────── */}
       <div className="sidebar-section">
         <div className="sidebar-section-title">{t('sidebar.left.mapsTitle')}</div>
 
@@ -369,7 +369,7 @@ export function LeftSidebar() {
         )}
       </div>
 
-      {/* ── Grid settings (only when a map is active) ─────────────────────── */}
+      {/* ── Grid settings (only when a map is active) ────────────────────────────── */}
       {activeMap && (
         <div className="sidebar-section">
           <div className="sidebar-section-title">{t('sidebar.left.gridTitle', { name: activeMap.name })}</div>
@@ -384,7 +384,7 @@ export function LeftSidebar() {
                   style={{ flex: 1, justifyContent: 'center', fontSize: 'var(--text-xs)', padding: '4px' }}
                   onClick={() => handleGridChange(type, gridSize)}
                 >
-                  {type === 'none' ? t('sidebar.left.gridOff') : type === 'square' ? '⬛' : '⬡'}
+                  {type === 'none' ? t('sidebar.left.gridOff') : type === 'square' ? '⬛' : '⭡'}
                 </button>
               ))}
             </div>
@@ -519,7 +519,7 @@ export function LeftSidebar() {
   )
 }
 
-// ── PDF → PNG conversion (renderer-side, requires pdfjs-dist) ─────────────────
+// ── PDF → PNG conversion (renderer-side, requires pdfjs-dist) ─────────────────────
 
 async function renderPdfToImage(
   base64Data: string,
@@ -603,22 +603,15 @@ function MapListItem({ map, index, total, isActive, onSelect, onReorder }: {
         } else if (selectedAction === 'delete') {
           const confirmed = await window.electronAPI.deleteMapConfirm(map.name)
           if (confirmed) {
-            await window.electronAPI.dbRun(
-              'DELETE FROM maps WHERE id = ?',
-              [map.id]
-            )
-            await window.electronAPI.dbRun(
-              'DELETE FROM tokens WHERE map_id = ?',
-              [map.id]
-            )
-            await window.electronAPI.dbRun(
-              'DELETE FROM initiative WHERE map_id = ?',
-              [map.id]
-            )
-            await window.electronAPI.dbRun(
-              'DELETE FROM fog_state WHERE map_id = ?',
-              [map.id]
-            )
+            await window.electronAPI.dbRunBatch([
+              { sql: 'DELETE FROM tokens WHERE map_id = ?', params: [map.id] },
+              { sql: 'DELETE FROM initiative WHERE map_id = ?', params: [map.id] },
+              { sql: 'DELETE FROM fog_state WHERE map_id = ?', params: [map.id] },
+              { sql: 'DELETE FROM drawings WHERE map_id = ?', params: [map.id] },
+              { sql: 'DELETE FROM walls WHERE map_id = ?', params: [map.id] },
+              { sql: 'DELETE FROM rooms WHERE map_id = ?', params: [map.id] },
+              { sql: 'DELETE FROM maps WHERE id = ?', params: [map.id] },
+            ])
             useCampaignStore.getState().refreshCampaigns()
             if (map.id === useCampaignStore.getState().activeMapId) {
               useTokenStore.getState().setTokens([])

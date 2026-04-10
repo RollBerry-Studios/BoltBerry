@@ -90,12 +90,12 @@ export function DrawingLayer({ stageRef, mapId, gridSize }: DrawingLayerProps) {
   async function addDrawing(d: { type: DrawingType; points: number[]; color: string; width: number; text?: string }) {
     if (!window.electronAPI) return
     try {
-      const pointsStr = d.type === 'text' ? JSON.stringify({ x: d.points[0], y: d.points[1], text: d.text }) : JSON.stringify(d.points)
+      const pointsStr = JSON.stringify(d.points)
       const result = await window.electronAPI.dbRun(
-        'INSERT INTO drawings (map_id, type, points, color, width, synced) VALUES (?, ?, ?, ?, ?, 1)',
-        [mapId, d.type, pointsStr, d.color, d.width]
+        'INSERT INTO drawings (map_id, type, points, color, width, text, synced) VALUES (?, ?, ?, ?, ?, ?, 1)',
+        [mapId, d.type, pointsStr, d.color, d.width, d.text ?? null]
       )
-      const newDrawing: Drawing = { id: result.lastInsertRowid, type: d.type, points: d.points, color: d.color, width: d.width }
+      const newDrawing: Drawing = { id: result.lastInsertRowid, type: d.type, points: d.points, color: d.color, width: d.width, text: d.text }
       setDrawings(prev => [...prev, newDrawing])
       window.electronAPI?.sendDrawing(newDrawing)
     } catch (err) {
@@ -181,7 +181,21 @@ async function loadDrawings(mapId: number): Promise<Drawing[]> {
     const rows = await window.electronAPI.dbQuery<{
       id: number; type: string; points: string; color: string; width: number; text: string | null
     }>('SELECT id, type, points, color, width, text FROM drawings WHERE map_id = ?', [mapId])
-    return rows.map((r) => ({ id: r.id, type: r.type as DrawingType, points: JSON.parse(r.points), color: r.color, width: r.width, text: r.text ?? undefined }))
+    return rows.map((r) => {
+      const parsed = JSON.parse(r.points)
+      let points: number[]
+      let text: string | undefined = r.text ?? undefined
+      if (Array.isArray(parsed)) {
+        points = parsed
+      } else if (parsed != null && typeof parsed === 'object' && parsed.x != null) {
+        // Legacy format: text was encoded inside points JSON
+        points = [parsed.x as number, parsed.y as number]
+        text = text ?? (parsed.text as string | undefined)
+      } else {
+        points = []
+      }
+      return { id: r.id, type: r.type as DrawingType, points, color: r.color, width: r.width, text }
+    })
   } catch (err) {
     console.error('[DrawingLayer] loadDrawings failed:', err)
     return []

@@ -66,11 +66,18 @@ export function HandoutsPanel() {
   }
 
   async function handleDeleteHandout(id: number) {
+    if (!window.electronAPI) return
+    const handout = handouts.find((h) => h.id === id)
+    const confirmed = await window.electronAPI.confirmDialog(
+      `Handout "${handout?.title ?? ''}" löschen?`,
+      'Diese Aktion kann nicht rükgängig gemacht werden.'
+    )
+    if (!confirmed) return
     try {
-      await window.electronAPI?.dbRun('DELETE FROM handouts WHERE id = ?', [id])
+      await window.electronAPI.dbRun('DELETE FROM handouts WHERE id = ?', [id])
       setHandouts((prev) => prev.filter((h) => h.id !== id))
       if (sentId === id) {
-        window.electronAPI?.sendHandout(null)
+        window.electronAPI.sendHandout(null)
         setSentId(null)
       }
     } catch (err) {
@@ -135,7 +142,7 @@ export function HandoutsPanel() {
                 title="An Spieler senden"
                 onClick={() => handleSendToPlayer(h)}
               >
-                {sentId === h.id ? '📺' : '→'}
+                {sentId === h.id ? '💺' : '→'}
               </button>
               <button
                 className="btn btn-ghost btn-icon"

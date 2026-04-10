@@ -68,7 +68,7 @@ const STATUS_EFFECTS = [
   { id: 'concentrating', icon: '🎯', label: 'Konzentration' },
   { id: 'blessed',       icon: '✨', label: 'Gesegnet' },
   { id: 'cursed',        icon: '🔮', label: 'Verflucht' },
-  { id: 'hasted',        icon: '⚡', label: 'Verlangsamt' },
+  { id: 'hasted',        icon: '⚡', label: 'Gehetzt' },
 ]
 
 function SectionHeader({ title, open, onToggle }: { title: string; open: boolean; onToggle: () => void }) {
@@ -130,6 +130,7 @@ export function TokenPanel() {
     if (!activeMapId || !window.electronAPI) return
     try {
       const asset = await window.electronAPI.importFile('token', activeMapId)
+      if (!asset) return  // user cancelled the dialog
       const result = await window.electronAPI.dbRun(
         `INSERT INTO tokens (map_id, name, image_path, x, y, faction, show_name) VALUES (?, ?, ?, ?, ?, 'party', 1)`,
         [activeMapId, 'Token', asset?.path ?? null, 100, 100]
@@ -615,10 +616,13 @@ export function TokenPanel() {
             className="btn btn-danger"
             style={{ fontSize: 'var(--text-xs)', justifyContent: 'center', marginTop: 'var(--sp-2)', width: '100%' }}
             onClick={async () => {
+              if (!window.electronAPI) return
+              const confirmed = await window.electronAPI.deleteTokenConfirm(selected.name)
+              if (!confirmed) return
               removeToken(selected.id)
               setSelectedToken(null)
               try {
-                await window.electronAPI?.dbRun('DELETE FROM tokens WHERE id = ?', [selected.id])
+                await window.electronAPI.dbRun('DELETE FROM tokens WHERE id = ?', [selected.id])
                 broadcastTokensFromPanel()
               } catch (err) {
                 console.error('[TokenPanel] delete failed:', err)

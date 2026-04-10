@@ -48,7 +48,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       audioInstance.pause()
       audioInstance = null
     }
-    const url = path.startsWith('/') ? `local-asset://${path}` : `local-asset://${path}`
+    const relativePath = path.startsWith('/') ? path.substring(1) : path
+    const url = `local-asset://${relativePath}`
     audioInstance = new Audio(url)
     audioInstance.loop = get().loop
     audioInstance.volume = get().volume
@@ -108,12 +109,17 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   },
 
   removeFromPlaylist: (index: number) => {
-    const playlist = get().playlist.filter((_, i) => i !== index)
-    const { playlistIndex } = get()
-    set({
-      playlist,
-      playlistIndex: index < playlistIndex ? playlistIndex - 1 : playlistIndex,
-    })
+    const { playlist, playlistIndex } = get()
+    const newPlaylist = playlist.filter((_, i) => i !== index)
+    let newIndex: number
+    if (index === playlistIndex) {
+      newIndex = -1 // removed the currently selected track
+    } else if (index < playlistIndex) {
+      newIndex = playlistIndex - 1
+    } else {
+      newIndex = playlistIndex
+    }
+    set({ playlist: newPlaylist, playlistIndex: newIndex })
   },
 
   clearPlaylist: () => {

@@ -19,17 +19,19 @@ export function useRotatedImage(src: string | null, rotation: number = 0): Rotat
 
   useEffect(() => {
     if (!source) {
-      setResult({ img: null, imgW: 0, imgH: 0 })
+      setResult((prev) => {
+        if (prev.img instanceof ImageBitmap) prev.img.close()
+        return { img: null, imgW: 0, imgH: 0 }
+      })
       return
     }
 
     const norm = ((rotation % 360) + 360) % 360
 
     if (norm === 0) {
-      setResult({
-        img: source,
-        imgW: source.naturalWidth,
-        imgH: source.naturalHeight,
+      setResult((prev) => {
+        if (prev.img instanceof ImageBitmap) prev.img.close()
+        return { img: source, imgW: source.naturalWidth, imgH: source.naturalHeight }
       })
       return
     }
@@ -45,9 +47,14 @@ export function useRotatedImage(src: string | null, rotation: number = 0): Rotat
     ctx.drawImage(source, -source.naturalWidth / 2, -source.naturalHeight / 2)
 
     createImageBitmap(canvas).then((bmp) => {
-      if (!cancelled) {
-        setResult({ img: bmp, imgW: offW, imgH: offH })
+      if (cancelled) {
+        bmp.close()
+        return
       }
+      setResult((prev) => {
+        if (prev.img instanceof ImageBitmap) prev.img.close()
+        return { img: bmp, imgW: offW, imgH: offH }
+      })
     })
 
     return () => { cancelled = true }

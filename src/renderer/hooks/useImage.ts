@@ -43,7 +43,7 @@ export function useImage(src: string | null): HTMLImageElement | null {
           setImg(image)
         }
         image.onerror = () => {
-          if (cancelled) setImg(null)
+          if (!cancelled) setImg(null)
         }
         image.src = imageData
       }).catch(() => {
@@ -57,7 +57,7 @@ export function useImage(src: string | null): HTMLImageElement | null {
         setImg(image)
       }
       image.onerror = () => {
-        if (cancelled) setImg(null)
+        if (!cancelled) setImg(null)
       }
       image.src = src
     }

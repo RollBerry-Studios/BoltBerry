@@ -30,14 +30,17 @@ export function useImageUrl(src: string | null): string | null {
 
     // Strip file:// prefix and load through main process
     const relativePath = src.startsWith('file://') ? src.substring(7) : src
+    let cancelled = false
     window.electronAPI?.getImageAsBase64(relativePath).then((imageData) => {
+      if (cancelled) return
       if (imageData) {
         cache.set(src, imageData)
         setUrl(imageData)
       } else {
         setUrl(null)
       }
-    }).catch(() => setUrl(null))
+    }).catch(() => { if (!cancelled) setUrl(null) })
+    return () => { cancelled = true }
   }, [src])
 
   return url

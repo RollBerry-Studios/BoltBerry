@@ -51,5 +51,8 @@ coverage/
 *.db
 *.sqlite
 
+# Patch files
+*.patch
+
 # Local tool configuration
 .claude/

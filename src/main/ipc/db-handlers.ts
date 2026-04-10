@@ -22,4 +22,15 @@ export function registerDbHandlers(): void {
       changes: result.changes,
     }
   })
+
+  ipcMain.handle(IPC.DB_RUN_BATCH, (_event, statements: Array<{ sql: string; params?: unknown[] }>) => {
+    const db = getDb()
+    const txn = db.transaction(() => {
+      for (const { sql, params = [] } of statements) {
+        db.prepare(sql).run(...params)
+      }
+    })
+    txn()
+    return true
+  })
 }

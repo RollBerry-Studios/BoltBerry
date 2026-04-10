@@ -59,7 +59,7 @@ export const useFogStore = create<FogState>((set, get) => ({
     const next = redoStack[0]
     set((s) => ({
       redoStack: s.redoStack.slice(1),
-      history: [...s.history, next],
+      history: [...s.history.slice(-49), next], // keep cap at 50
     }))
     return next
   },

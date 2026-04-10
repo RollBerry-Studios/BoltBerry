@@ -2,6 +2,16 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import type { InitiativeEntry, EffectTimer } from '@shared/ipc-types'
 
+function persistCurrentTurns(entries: InitiativeEntry[]) {
+  if (!window.electronAPI) return
+  entries.forEach((e) => {
+    window.electronAPI!.dbRun(
+      'UPDATE initiative SET current_turn = ? WHERE id = ?',
+      [e.currentTurn ? 1 : 0, e.id]
+    )
+  })
+}
+
 interface InitiativeState {
   entries: InitiativeEntry[]
   round: number
@@ -19,7 +29,7 @@ interface InitiativeState {
 }
 
 export const useInitiativeStore = create<InitiativeState>()(
-  immer((set) => ({
+  immer((set, get) => ({
     entries: [],
     round: 1,
 
@@ -46,7 +56,7 @@ export const useInitiativeStore = create<InitiativeState>()(
         s.entries.sort((a, b) => b.roll - a.roll)
       }),
 
-    nextTurn: () =>
+    nextTurn: () => {
       set((s) => {
         if (s.entries.length === 0) return
         const currentIdx = s.entries.findIndex((e) => e.currentTurn)
@@ -66,7 +76,9 @@ export const useInitiativeStore = create<InitiativeState>()(
           })
         }
         s.entries[nextIdx].currentTurn = true
-      }),
+      })
+      persistCurrentTurns(get().entries)
+    },
 
     resetCombat: () =>
       set((s) => {

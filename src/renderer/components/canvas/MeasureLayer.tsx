@@ -100,7 +100,7 @@ export function MeasureLayer({ stageRef, gridSize, ftPerUnit }: MeasureLayerProp
   const dx = endX - startX
   const dy = endY - startY
   const distMapPx = Math.sqrt(dx * dx + dy * dy)
-  const distGridUnits = distMapPx / gridSize
+  const distGridUnits = gridSize > 0 ? distMapPx / gridSize : 0
   const dist = Math.round(distGridUnits * ftPerUnit)
 
   return (

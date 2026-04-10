@@ -19,7 +19,9 @@ export function registerExportImportHandlers(): void {
     const data = buildCampaignExport(campaignId, db)
     data.campaign.name = `${data.campaign.name} (Kopie)`
     const newId = insertCampaignData(data, db)
-    const newCampaign = db.prepare('SELECT id, name, created_at, last_opened FROM campaigns WHERE id = ?').get(newId) as any
+    const newCampaign = db.prepare('SELECT id, name, created_at, last_opened FROM campaigns WHERE id = ?').get(newId) as
+      | { id: number; name: string; created_at: string; last_opened: string } | undefined
+    if (!newCampaign) return { success: false, error: 'Duplizierte Kampagne nicht gefunden' }
     return {
       success: true,
       campaign: {
@@ -120,7 +122,12 @@ export function registerExportImportHandlers(): void {
 
     let campaignData: CampaignExport
     try {
-      campaignData = JSON.parse(readFileSync(campaignJsonPath, 'utf-8')) as CampaignExport
+      const parsed: unknown = JSON.parse(readFileSync(campaignJsonPath, 'utf-8'))
+      if (!isValidCampaignExport(parsed)) {
+        rmSync(importDir, { recursive: true, force: true })
+        return { success: false, error: 'Ungültiges Kampagnen-Format in campaign.json' }
+      }
+      campaignData = parsed
     } catch {
       rmSync(importDir, { recursive: true, force: true })
       return { success: false, error: 'campaign.json konnte nicht gelesen werden' }
@@ -197,6 +204,19 @@ function buildZip(
 
     archive.finalize()
   })
+}
+
+// ── Validation ───────────────────────────────────────────────────────────────
+
+function isValidCampaignExport(data: unknown): data is CampaignExport {
+  if (typeof data !== 'object' || data === null) return false
+  const obj = data as Record<string, unknown>
+  return (
+    typeof obj.version === 'number' &&
+    typeof obj.campaign === 'object' && obj.campaign !== null &&
+    typeof (obj.campaign as Record<string, unknown>).name === 'string' &&
+    Array.isArray(obj.maps)
+  )
 }
 
 // ── Export data structures ─────────────────────────────────────────────────────

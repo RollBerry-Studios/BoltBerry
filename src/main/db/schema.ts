@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 18
+export const SCHEMA_VERSION = 19
 
 // Migration: v1 → v2 — add explored_bitmap column to fog_state
 export const MIGRATE_V1_TO_V2 = `
@@ -218,7 +218,9 @@ CREATE TABLE IF NOT EXISTS tokens (
   notes              TEXT,
   status_effects     TEXT,
   faction            TEXT    DEFAULT 'party',
-  show_name          INTEGER NOT NULL DEFAULT 1
+  show_name          INTEGER NOT NULL DEFAULT 1,
+  light_radius       INTEGER NOT NULL DEFAULT 0,
+  light_color        TEXT    NOT NULL DEFAULT '#ffcc44'
 );
 
 -- Initiative list
@@ -344,6 +346,13 @@ CREATE INDEX IF NOT EXISTS idx_maps_campaign_id ON maps(campaign_id);
 UPDATE schema_version SET version = 18;
 `
 
+// Migration: v18 → v19 — add dedicated light_radius and light_color columns to tokens
+export const MIGRATE_V18_TO_V19 = `
+ALTER TABLE tokens ADD COLUMN light_radius INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE tokens ADD COLUMN light_color TEXT NOT NULL DEFAULT '#ffcc44';
+UPDATE schema_version SET version = 19;
+`
+
 export const SEED_SCHEMA_VERSION = `
-INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 18);
+INSERT OR IGNORE INTO schema_version (id, version) VALUES (1, 19);
 `

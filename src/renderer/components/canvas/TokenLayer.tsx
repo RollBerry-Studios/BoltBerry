@@ -89,10 +89,15 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
   const [submenuType, setSubmenuType] = useState<string | null>(null)
   const [rubberBand, setRubberBand] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null)
 
+  // Ref for values read by stable callbacks (avoids recreating closures on every render)
+  const latestRef = useRef({ tokens, selectedTokenIds, scale, offsetX, offsetY, gridSnap, map, editName, editHpCurrent, editHpMax, editAc })
+  latestRef.current = { tokens, selectedTokenIds, scale, offsetX, offsetY, gridSnap, map, editName, editHpCurrent, editHpMax, editAc }
+
   const isDraggable = activeTool === 'select'
   const sortedTokens = useMemo(() => [...tokens].sort((a, b) => a.zIndex - b.zIndex), [tokens])
 
-  async function handleDragEnd(token: TokenRecord, e: Konva.KonvaEventObject<DragEvent>) {
+  const stableHandleDragEnd = useCallback(async (token: TokenRecord, e: Konva.KonvaEventObject<DragEvent>) => {
+    const { tokens, selectedTokenIds, scale, offsetX, offsetY, gridSnap, map } = latestRef.current
     const sx = e.target.x()
     const sy = e.target.y()
     const dx = sx - (token.x * scale + offsetX)
@@ -156,14 +161,14 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
         broadcastTokens(useTokenStore.getState().tokens)
       },
     })
-  }
+  }, [moveToken])
 
-  function handleContextMenu(token: TokenRecord, e: Konva.KonvaEventObject<MouseEvent>) {
+  const stableHandleContextMenu = useCallback((token: TokenRecord, e: Konva.KonvaEventObject<MouseEvent>) => {
     e.evt.preventDefault()
     const stage = stageRef.current
     if (!stage) return
     const pos = stage.container().getBoundingClientRect()
-    if (!selectedTokenIds.includes(token.id)) {
+    if (!latestRef.current.selectedTokenIds.includes(token.id)) {
       setSelectedToken(token.id)
     }
     setContextMenu({
@@ -172,7 +177,7 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
       y: e.evt.clientY - pos.top,
       tokenId: token.id,
     })
-  }
+  }, [setSelectedToken])
 
   function handleLayerMouseDown(e: Konva.KonvaEventObject<MouseEvent>) {
     if (activeTool !== 'select') return
@@ -220,17 +225,17 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     setRubberBand(null)
   }
 
-  function closeContextMenu() {
+  const closeContextMenu = useCallback(() => {
     setContextMenu((m) => ({ ...m, visible: false }))
     setMarkerSubmenuId(null)
     setSubmenuType(null)
-  }
+  }, [])
 
-  function startEdit(token: TokenRecord) {
+  const stableStartEdit = useCallback((token: TokenRecord) => {
     setEditingId(token.id)
     setEditName(token.name)
     closeContextMenu()
-  }
+  }, [closeContextMenu])
 
   function startEditHp(token: TokenRecord) {
     setEditingHpId(token.id)
@@ -245,9 +250,9 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     closeContextMenu()
   }
 
-  async function commitEditHp(id: number) {
-    const hpCurrent = parseInt(editHpCurrent) || 0
-    const hpMax = parseInt(editHpMax) || 0
+  const stableCommitEditHp = useCallback(async (id: number) => {
+    const hpCurrent = parseInt(latestRef.current.editHpCurrent) || 0
+    const hpMax = parseInt(latestRef.current.editHpMax) || 0
     updateToken(id, { hpCurrent, hpMax })
     try {
       await window.electronAPI?.dbRun('UPDATE tokens SET hp_current = ?, hp_max = ? WHERE id = ?', [hpCurrent, hpMax, id])
@@ -256,15 +261,9 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
       console.error('[TokenLayer] commitEditHp failed:', err)
     }
     setEditingHpId(null)
-  }
+  }, [updateToken])
 
-  async function commitEditAc(id: number) {
-    const acVal = editAc.trim() === '' ? null : parseInt(editAc) || 0
-    handleUpdate(id, { ac: acVal as any })
-    setEditingAcId(null)
-  }
-
-  function handleUpdate(id: number, updates: Record<string, any>) {
+  const handleUpdate = useCallback((id: number, updates: Record<string, any>) => {
     updateToken(id, updates)
     const cols = Object.keys(updates).map((k) => {
       const col = k.replace(/([A-Z])/g, '_$1').toLowerCase()
@@ -274,10 +273,17 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
     window.electronAPI?.dbRun(`UPDATE tokens SET ${cols} WHERE id = ?`, [...vals, id])
       .then(() => broadcastTokens(useTokenStore.getState().tokens))
       .catch((err: any) => console.error('[TokenLayer] handleUpdate failed:', err))
-  }
+  }, [updateToken])
 
-  async function commitEdit(id: number) {
-    const name = editName.trim() || 'Token'
+  const stableCommitEditAc = useCallback(async (id: number) => {
+    const { editAc } = latestRef.current
+    const acVal = editAc.trim() === '' ? null : parseInt(editAc) || 0
+    handleUpdate(id, { ac: acVal as any })
+    setEditingAcId(null)
+  }, [handleUpdate])
+
+  const stableCommitEdit = useCallback(async (id: number) => {
+    const name = latestRef.current.editName.trim() || 'Token'
     updateToken(id, { name })
     try {
       await window.electronAPI?.dbRun('UPDATE tokens SET name = ? WHERE id = ?', [name, id])
@@ -286,7 +292,15 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
       console.error('[TokenLayer] commitEdit failed:', err)
     }
     setEditingId(null)
-  }
+  }, [updateToken])
+
+  const stableHandleSelect = useCallback((tokenId: number, e?: Konva.KonvaEventObject<MouseEvent>) => {
+    if (e?.evt?.shiftKey) {
+      toggleTokenInSelection(tokenId)
+    } else if (!latestRef.current.selectedTokenIds.includes(tokenId)) {
+      setSelectedToken(tokenId)
+    }
+  }, [toggleTokenInSelection, setSelectedToken])
 
   async function handleDelete(id: number) {
     closeContextMenu()
@@ -593,22 +607,16 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
               isEditingAc={editingAcId === token.id}
               editAc={editAc}
               onEditNameChange={setEditName}
-              onEditCommit={() => commitEdit(token.id)}
+              onEditCommit={stableCommitEdit}
               onEditHpCurrentChange={setEditHpCurrent}
               onEditHpMaxChange={setEditHpMax}
-              onEditHpCommit={() => commitEditHp(token.id)}
+              onEditHpCommit={stableCommitEditHp}
               onEditAcChange={setEditAc}
-              onEditAcCommit={() => commitEditAc(token.id)}
-              onSelect={(e?: Konva.KonvaEventObject<MouseEvent>) => {
-                if (e?.evt?.shiftKey) {
-                  toggleTokenInSelection(token.id)
-                } else if (!selectedTokenIds.includes(token.id)) {
-                  setSelectedToken(token.id)
-                }
-              }}
-              onDblClick={() => startEdit(token)}
-              onDragEnd={(e) => handleDragEnd(token, e)}
-              onContextMenu={(e) => handleContextMenu(token, e)}
+              onEditAcCommit={stableCommitEditAc}
+              onSelect={stableHandleSelect}
+              onDblClick={stableStartEdit}
+              onDragEnd={stableHandleDragEnd}
+              onContextMenu={stableHandleContextMenu}
             />
           )
         })}
@@ -689,7 +697,7 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
                     null,
                     { label: `❌ Alle löschen (${selectedTokenIds.length})`, action: () => handleDelete(token.id), danger: true },
                   ] : [
-                    { label: '✏️ Umbenennen', action: () => startEdit(token) },
+                    { label: '✏️ Umbenennen', action: () => stableStartEdit(token) },
                     { label: '❤️ HP bearbeiten', action: () => startEditHp(token) },
                     { label: '🛡 AC bearbeiten', action: () => startEditAc(token) },
                     { label: '📝 Notiz', action: () => handleEditNotes(token) },
@@ -907,16 +915,16 @@ interface TokenNodeProps {
   isEditingAc: boolean
   editAc: string
   onEditNameChange: (v: string) => void
-  onEditCommit: () => void
+  onEditCommit: (id: number) => void
   onEditHpCurrentChange: (v: string) => void
   onEditHpMaxChange: (v: string) => void
-  onEditHpCommit: () => void
+  onEditHpCommit: (id: number) => void
   onEditAcChange: (v: string) => void
-  onEditAcCommit: () => void
-  onSelect: (e?: Konva.KonvaEventObject<MouseEvent>) => void
-  onDblClick: () => void
-  onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => void
-  onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => void
+  onEditAcCommit: (id: number) => void
+  onSelect: (tokenId: number, e?: Konva.KonvaEventObject<MouseEvent>) => void
+  onDblClick: (token: TokenRecord) => void
+  onDragEnd: (token: TokenRecord, e: Konva.KonvaEventObject<DragEvent>) => void
+  onContextMenu: (token: TokenRecord, e: Konva.KonvaEventObject<MouseEvent>) => void
 }
 
 const TokenNode = memo(function TokenNode({
@@ -932,15 +940,24 @@ const TokenNode = memo(function TokenNode({
   const hpRatio = token.hpMax > 0 ? Math.max(0, Math.min(1, token.hpCurrent / token.hpMax)) : -1
   const hpColor = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444'
 
+  // Internal handlers that bind token data to stable parent callbacks
+  const handleClick = useCallback((e?: Konva.KonvaEventObject<MouseEvent>) => onSelect(token.id, e), [onSelect, token.id])
+  const handleDblClick = useCallback(() => onDblClick(token), [onDblClick, token])
+  const handleDrag = useCallback((e: Konva.KonvaEventObject<DragEvent>) => onDragEnd(token, e), [onDragEnd, token])
+  const handleCtxMenu = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => onContextMenu(token, e), [onContextMenu, token])
+  const handleEditDone = useCallback(() => onEditCommit(token.id), [onEditCommit, token.id])
+  const handleHpDone = useCallback(() => onEditHpCommit(token.id), [onEditHpCommit, token.id])
+  const handleAcDone = useCallback(() => onEditAcCommit(token.id), [onEditAcCommit, token.id])
+
   return (
     // Outer group: positioned at top-left, handles drag + events
     <Group
       x={x} y={y}
       draggable={isDraggable}
-      onDragEnd={onDragEnd}
-      onClick={onSelect}
-      onDblClick={onDblClick}
-      onContextMenu={onContextMenu}
+      onDragEnd={handleDrag}
+      onClick={handleClick}
+      onDblClick={handleDblClick}
+      onContextMenu={handleCtxMenu}
     >
       {/* Inner group: rotates around token center (r, r) */}
       <Group x={r} y={r} rotation={token.rotation}>
@@ -1047,10 +1064,10 @@ const TokenNode = memo(function TokenNode({
             value={editName}
             onChange={(e) => onEditNameChange(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') onEditCommit()
-              if (e.key === 'Escape') onEditCommit()
+              if (e.key === 'Enter') handleEditDone()
+              if (e.key === 'Escape') handleEditDone()
             }}
-            onBlur={onEditCommit}
+            onBlur={handleEditDone}
             style={{
               position: 'absolute',
               left: x - 40,
@@ -1089,8 +1106,8 @@ const TokenNode = memo(function TokenNode({
               value={editHpCurrent}
               onChange={(e) => onEditHpCurrentChange(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') onEditHpCommit()
-                if (e.key === 'Escape') onEditHpCommit()
+                if (e.key === 'Enter') handleHpDone()
+                if (e.key === 'Escape') handleHpDone()
               }}
               style={{
                 width: 36,
@@ -1110,10 +1127,10 @@ const TokenNode = memo(function TokenNode({
               value={editHpMax}
               onChange={(e) => onEditHpMaxChange(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') onEditHpCommit()
-                if (e.key === 'Escape') onEditHpCommit()
+                if (e.key === 'Enter') handleHpDone()
+                if (e.key === 'Escape') handleHpDone()
               }}
-              onBlur={onEditHpCommit}
+              onBlur={handleHpDone}
               style={{
                 width: 36,
                 background: '#182130',
@@ -1136,10 +1153,10 @@ const TokenNode = memo(function TokenNode({
             value={editAc}
             onChange={(e) => onEditAcChange(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') onEditAcCommit()
-              if (e.key === 'Escape') onEditAcCommit()
+              if (e.key === 'Enter') handleAcDone()
+              if (e.key === 'Escape') handleAcDone()
             }}
-            onBlur={onEditAcCommit}
+            onBlur={handleAcDone}
             placeholder="AC"
             style={{
               position: 'absolute',

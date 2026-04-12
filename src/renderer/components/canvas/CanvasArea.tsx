@@ -500,7 +500,8 @@ async function loadMapData(mapId: number, map: MapRecord) {
       visible_to_players: number; rotation: number; locked: number; z_index: number
       marker_color: string | null; ac: number | null; notes: string | null
       status_effects: string | null; faction: string; show_name: number
-    }>('SELECT id, map_id, name, image_path, x, y, size, hp_current, hp_max, visible_to_players, rotation, locked, z_index, marker_color, ac, notes, status_effects, faction, show_name FROM tokens WHERE map_id = ?', [mapId])
+      light_radius: number; light_color: string
+    }>('SELECT id, map_id, name, image_path, x, y, size, hp_current, hp_max, visible_to_players, rotation, locked, z_index, marker_color, ac, notes, status_effects, faction, show_name, light_radius, light_color FROM tokens WHERE map_id = ?', [mapId])
 
     useTokenStore.getState().setTokens(tokenRows.map((r) => ({
       id: r.id,
@@ -522,6 +523,8 @@ async function loadMapData(mapId: number, map: MapRecord) {
       statusEffects: r.status_effects ? JSON.parse(r.status_effects) : null,
       faction: r.faction ?? 'party',
       showName: Boolean(r.show_name ?? 1),
+      lightRadius: r.light_radius ?? 0,
+      lightColor: r.light_color ?? '#ffcc44',
     })))
 
     // Load initiative

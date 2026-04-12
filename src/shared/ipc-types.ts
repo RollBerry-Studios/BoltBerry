@@ -132,6 +132,8 @@ export interface TokenRecord {
   statusEffects: string[] | null
   faction: string
   showName: boolean
+  lightRadius: number
+  lightColor: string
 }
 
 export interface EffectTimer {

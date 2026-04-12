@@ -2,7 +2,6 @@ import { useTranslation } from 'react-i18next'
 import { useUIStore } from '../stores/uiStore'
 import { useInitiativeStore } from '../stores/initiativeStore'
 import { useAppStore } from '../stores/appStore'
-import { useCampaignStore } from '../stores/campaignStore'
 import { APP_VERSION } from '@shared/version'
 
 export function StatusBar() {
@@ -10,49 +9,7 @@ export function StatusBar() {
   const { playerConnected, blackoutActive, sessionMode } = useUIStore()
   const { entries, round } = useInitiativeStore()
   const { saveState, lastSaved } = useAppStore()
-  const { activeCampaignId } = useCampaignStore()
   const current = entries.find((e) => e.currentTurn)
-
-  async function handleExport() {
-    if (!activeCampaignId || !window.electronAPI) return
-    useAppStore.getState().setSaving()
-    const result = await window.electronAPI.exportCampaign(activeCampaignId) as { success: boolean; error?: string; canceled?: boolean }
-    if (result.success) {
-      useAppStore.getState().setSaved()
-    } else if (!result.canceled) {
-      useAppStore.getState().setSaveError()
-    } else {
-      useAppStore.getState().setSaved()
-    }
-  }
-
-  async function handleQuickBackup() {
-    if (!activeCampaignId || !window.electronAPI) return
-    useAppStore.getState().setSaving()
-    const result = await window.electronAPI.quickBackup(activeCampaignId) as {
-      success: boolean; filePath?: string; error?: string
-    }
-    if (result.success) {
-      useAppStore.getState().setSaved()
-    } else {
-      useAppStore.getState().setSaveError()
-    }
-  }
-
-  async function handleImport() {
-    if (!window.electronAPI) return
-    const result = await window.electronAPI.importCampaign() as { success: boolean; campaignId?: number; error?: string; canceled?: boolean }
-    if (result.success && result.campaignId) {
-      const campaigns = await window.electronAPI.dbQuery<{
-        id: number; name: string; created_at: string; last_opened: string
-      }>('SELECT * FROM campaigns ORDER BY last_opened DESC')
-      const { setCampaigns, setActiveCampaign } = useCampaignStore.getState()
-      setCampaigns(campaigns.map((c) => ({
-        id: c.id, name: c.name, createdAt: c.created_at, lastOpened: c.last_opened,
-      })))
-      setActiveCampaign(result.campaignId)
-    }
-  }
 
   const saveLabel = (() => {
     switch (saveState) {
@@ -99,35 +56,6 @@ export function StatusBar() {
       )}
 
       <div style={{ flex: 1 }} />
-
-      {activeCampaignId && (
-        <>
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', height: 20 }}
-            onClick={handleImport}
-            title={t('statusBar.importTooltip')}
-          >
-            {t('statusBar.import')}
-          </button>
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', height: 20 }}
-            onClick={handleExport}
-            title={t('statusBar.exportTooltip')}
-          >
-            {t('statusBar.export')}
-          </button>
-          <button
-            className="btn btn-ghost"
-            style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', height: 20, color: 'var(--accent-light)' }}
-            onClick={handleQuickBackup}
-            title={t('statusBar.backupTooltip')}
-          >
-            {t('statusBar.backup')}
-          </button>
-        </>
-      )}
 
       <div className="statusbar-item" style={{ color: saveLabel.color }}>
         {saveLabel.text}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useMapTransformStore } from '../../stores/mapTransformStore'
@@ -568,6 +568,55 @@ function MapListItem({ map, index, total, isActive, onSelect, onReorder }: {
   onReorder: (id: number, direction: 'up' | 'down') => void
 }) {
   const thumbnailUrl = useImageUrl(map.imagePath)
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState(map.name)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (renaming) {
+      setRenameValue(map.name)
+      setTimeout(() => inputRef.current?.select(), 0)
+    }
+  }, [renaming, map.name])
+
+  async function commitRename() {
+    const trimmed = renameValue.trim()
+    setRenaming(false)
+    if (!trimmed || trimmed === map.name || !window.electronAPI) return
+    await window.electronAPI.dbRun('UPDATE maps SET name = ? WHERE id = ?', [trimmed, map.id])
+    useCampaignStore.getState().refreshCampaigns()
+  }
+
+  async function handleDelete() {
+    if (!window.electronAPI) return
+    const confirmed = await window.electronAPI.deleteMapConfirm(map.name)
+    if (!confirmed) return
+    await window.electronAPI.dbRunBatch([
+      { sql: 'DELETE FROM tokens WHERE map_id = ?', params: [map.id] },
+      { sql: 'DELETE FROM initiative WHERE map_id = ?', params: [map.id] },
+      { sql: 'DELETE FROM fog_state WHERE map_id = ?', params: [map.id] },
+      { sql: 'DELETE FROM drawings WHERE map_id = ?', params: [map.id] },
+      { sql: 'DELETE FROM walls WHERE map_id = ?', params: [map.id] },
+      { sql: 'DELETE FROM rooms WHERE map_id = ?', params: [map.id] },
+      { sql: 'DELETE FROM maps WHERE id = ?', params: [map.id] },
+    ])
+    useCampaignStore.getState().refreshCampaigns()
+    if (map.id === useCampaignStore.getState().activeMapId) {
+      useTokenStore.getState().setTokens([])
+      useInitiativeStore.getState().setEntries([])
+      useUIStore.getState().setPlayerConnected(false)
+      window.electronAPI?.sendFullSync({
+        mode: 'map',
+        map: null,
+        tokens: [],
+        fogBitmap: null,
+        exploredBitmap: null,
+        atmosphereImagePath: null,
+        blackout: false,
+        drawings: [],
+      })
+    }
+  }
 
   return (
     <div
@@ -578,58 +627,20 @@ function MapListItem({ map, index, total, isActive, onSelect, onReorder }: {
         border: isActive ? '1px solid var(--accent-blue)' : '1px solid transparent',
         borderRadius: 'var(--radius)',
         color: isActive ? 'var(--accent-blue-light)' : 'var(--text-secondary)',
-        cursor: 'pointer', textAlign: 'left', fontSize: 'var(--text-sm)',
+        cursor: renaming ? 'default' : 'pointer',
+        textAlign: 'left', fontSize: 'var(--text-sm)',
         marginBottom: 'var(--sp-1)', transition: 'background var(--transition)',
       }}
-      onClick={onSelect}
+      onClick={renaming ? undefined : onSelect}
       onContextMenu={async (e) => {
         e.preventDefault()
-        if (!window.electronAPI) return
-
+        if (!window.electronAPI || renaming) return
         const selectedAction = await window.electronAPI.showContextMenu([
           { label: 'Umbenennen', action: 'rename' },
           { label: 'Löschen', action: 'delete', danger: true },
         ])
-
-        if (selectedAction === 'rename') {
-          const newName = prompt('Neuer Name:', map.name)
-          if (newName && newName.trim()) {
-            await window.electronAPI.dbRun(
-              'UPDATE maps SET name = ? WHERE id = ?',
-              [newName.trim(), map.id]
-            )
-            useCampaignStore.getState().refreshCampaigns()
-          }
-        } else if (selectedAction === 'delete') {
-          const confirmed = await window.electronAPI.deleteMapConfirm(map.name)
-          if (confirmed) {
-            await window.electronAPI.dbRunBatch([
-              { sql: 'DELETE FROM tokens WHERE map_id = ?', params: [map.id] },
-              { sql: 'DELETE FROM initiative WHERE map_id = ?', params: [map.id] },
-              { sql: 'DELETE FROM fog_state WHERE map_id = ?', params: [map.id] },
-              { sql: 'DELETE FROM drawings WHERE map_id = ?', params: [map.id] },
-              { sql: 'DELETE FROM walls WHERE map_id = ?', params: [map.id] },
-              { sql: 'DELETE FROM rooms WHERE map_id = ?', params: [map.id] },
-              { sql: 'DELETE FROM maps WHERE id = ?', params: [map.id] },
-            ])
-            useCampaignStore.getState().refreshCampaigns()
-            if (map.id === useCampaignStore.getState().activeMapId) {
-              useTokenStore.getState().setTokens([])
-              useInitiativeStore.getState().setEntries([])
-              useUIStore.getState().setPlayerConnected(false)
-              window.electronAPI?.sendFullSync({
-                mode: 'map',
-                map: null,
-                tokens: [],
-                fogBitmap: null,
-                exploredBitmap: null,
-                atmosphereImagePath: null,
-                blackout: false,
-                drawings: [],
-              })
-            }
-          }
-        }
+        if (selectedAction === 'rename') setRenaming(true)
+        else if (selectedAction === 'delete') handleDelete()
       }}
     >
       <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', minWidth: 16 }}>{index + 1}</span>
@@ -640,25 +651,49 @@ function MapListItem({ map, index, total, isActive, onSelect, onReorder }: {
           style={{ width: 32, height: 24, objectFit: 'cover', borderRadius: 3, flexShrink: 0, border: '1px solid var(--border)' }}
         />
       )}
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-        {map.name}
-      </span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
-        <button
-          className="btn btn-ghost"
-          style={{ padding: '0 4px', fontSize: 10, lineHeight: '14px', minHeight: 14 }}
-          disabled={index === 0}
-          onClick={(e) => { e.stopPropagation(); onReorder(map.id, 'up') }}
-          title="Move up"
-        >▲</button>
-        <button
-          className="btn btn-ghost"
-          style={{ padding: '0 4px', fontSize: 10, lineHeight: '14px', minHeight: 14 }}
-          disabled={index === total - 1}
-          onClick={(e) => { e.stopPropagation(); onReorder(map.id, 'down') }}
-          title="Move down"
-        >▼</button>
-      </div>
+
+      {renaming ? (
+        <input
+          ref={inputRef}
+          className="input"
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commitRename() }
+            if (e.key === 'Escape') setRenaming(false)
+            e.stopPropagation()
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onBlur={commitRename}
+          style={{ flex: 1, fontSize: 'var(--text-xs)', padding: '2px 4px', height: 24 }}
+        />
+      ) : (
+        <span
+          style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}
+          onDoubleClick={(e) => { e.stopPropagation(); setRenaming(true) }}
+        >
+          {map.name}
+        </span>
+      )}
+
+      {!renaming && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, flexShrink: 0 }}>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: '0 4px', fontSize: 10, lineHeight: '14px', minHeight: 14 }}
+            disabled={index === 0}
+            onClick={(e) => { e.stopPropagation(); onReorder(map.id, 'up') }}
+            title="Nach oben"
+          >▲</button>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: '0 4px', fontSize: 10, lineHeight: '14px', minHeight: 14 }}
+            disabled={index === total - 1}
+            onClick={(e) => { e.stopPropagation(); onReorder(map.id, 'down') }}
+            title="Nach unten"
+          >▼</button>
+        </div>
+      )}
     </div>
   )
 }

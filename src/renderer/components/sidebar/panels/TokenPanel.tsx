@@ -2,14 +2,15 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useTokenStore } from '../../../stores/tokenStore'
 import { useUIStore } from '../../../stores/uiStore'
 import { useCampaignStore } from '../../../stores/campaignStore'
+import { useInitiativeStore } from '../../../stores/initiativeStore'
 import { useImageUrl } from '../../../hooks/useImageUrl'
 import { invalidateImageCache } from '../../../hooks/useImage'
 import { invalidateImageUrlCache } from '../../../hooks/useImageUrl'
 import type { TokenRecord } from '@shared/ipc-types'
 
 const LIGHT_COLORS = [
-  { id: 'warm', hex: '#ffcc44' },
-  { id: 'cool', hex: '#4488ff' },
+  { id: 'warm',  hex: '#ffcc44' },
+  { id: 'cool',  hex: '#4488ff' },
   { id: 'white', hex: '#ffffff' },
   { id: 'green', hex: '#44ff88' },
 ]
@@ -26,25 +27,6 @@ const TOKEN_TEMPLATES = [
   { name: 'Drache',   hp: 200, ac: 19, size: 4, faction: 'enemy' as const },
 ]
 
-function parseLightFromNotes(notes: string | null): { enabled: boolean; radius: number; color: string } {
-  if (!notes) return { enabled: false, radius: 5, color: '#ffcc44' }
-  const match = notes.match(/light:(\d+)(?::(#\w+))?/)
-  if (!match) return { enabled: false, radius: 5, color: '#ffcc44' }
-  return {
-    enabled: true,
-    radius: parseInt(match[1]) || 5,
-    color: match[2] || '#ffcc44',
-  }
-}
-
-function setLightInNotes(notes: string | null, enabled: boolean, radius: number, color: string): string | null {
-  const lightStr = enabled ? `light:${radius}:${color}` : ''
-  const cleaned = (notes ?? '').replace(/light:\d+(?::#\w+)?/g, '').trim()
-  if (!lightStr && !cleaned) return null
-  if (!lightStr) return cleaned || null
-  if (!cleaned) return lightStr
-  return `${cleaned}\n${lightStr}`
-}
 
 const STATUS_EFFECTS = [
   { id: 'blinded',       icon: '🫣', label: 'Blind' },
@@ -132,7 +114,7 @@ export function TokenPanel() {
       const asset = await window.electronAPI.importFile('token', activeMapId)
       if (!asset) return  // user cancelled the dialog
       const result = await window.electronAPI.dbRun(
-        `INSERT INTO tokens (map_id, name, image_path, x, y, faction, show_name) VALUES (?, ?, ?, ?, ?, 'party', 1)`,
+        `INSERT INTO tokens (map_id, name, image_path, x, y, faction, show_name, light_radius, light_color) VALUES (?, ?, ?, ?, ?, 'party', 1, 0, '#ffcc44')`,
         [activeMapId, 'Token', asset?.path ?? null, 100, 100]
       )
       const token: TokenRecord = {
@@ -155,6 +137,8 @@ export function TokenPanel() {
         statusEffects: null,
         faction: 'party',
         showName: true,
+        lightRadius: 0,
+        lightColor: '#ffcc44',
       }
       addToken(token)
       setSelectedToken(token.id)
@@ -175,7 +159,7 @@ export function TokenPanel() {
       const size = template ? template.size : 1
       const faction = template ? template.faction : 'party'
       const result = await window.electronAPI.dbRun(
-        `INSERT INTO tokens (map_id, name, image_path, x, y, size, hp_current, hp_max, ac, faction, visible_to_players, show_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`,
+        `INSERT INTO tokens (map_id, name, image_path, x, y, size, hp_current, hp_max, ac, faction, visible_to_players, show_name, light_radius, light_color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 0, '#ffcc44')`,
         [activeMapId, name, asset?.path ?? null, 100, 100, size, hp, hp, ac, faction]
       )
       const token: TokenRecord = {
@@ -198,6 +182,8 @@ export function TokenPanel() {
         statusEffects: null,
         faction,
         showName: true,
+        lightRadius: 0,
+        lightColor: '#ffcc44',
       }
       addToken(token)
       setSelectedToken(token.id)
@@ -438,6 +424,8 @@ export function TokenPanel() {
                   <option value="friendly">🔵 Freundlich</option>
                 </select>
               </div>
+              {/* Quick initiative add */}
+              <AddToInitiativeButton token={selected} mapId={activeMapId} />
             </div>
           )}
 
@@ -501,35 +489,34 @@ export function TokenPanel() {
           {/* ── Licht ──────────────────────────────────────────────────── */}
           <SectionHeader title="Licht" open={secLicht} onToggle={() => setSecLicht((v) => !v)} />
           {secLicht && (() => {
-            const light = parseLightFromNotes(selected.notes)
+            const lightOn = selected.lightRadius > 0
+            const radius = selected.lightRadius || 5
+            const color = selected.lightColor || '#ffcc44'
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)', paddingBottom: 'var(--sp-2)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
                   <button
                     className="btn btn-ghost"
-                    style={{ fontSize: 'var(--text-xs)', flex: 1, justifyContent: 'center' }}
-                    onClick={() => {
-                      const newNotes = setLightInNotes(selected.notes, !light.enabled, light.radius, light.color)
-                      handleUpdate(selected.id, { notes: newNotes })
+                    style={{ fontSize: 'var(--text-xs)', flex: 1, justifyContent: 'center',
+                      background: lightOn ? 'var(--accent-blue-dim)' : undefined,
+                      border: lightOn ? '1px solid var(--accent-blue)' : undefined,
                     }}
+                    onClick={() => handleUpdate(selected.id, { lightRadius: lightOn ? 0 : 5, lightColor: color })}
                   >
-                    💡 Lichtquelle {light.enabled ? 'an' : 'aus'}
+                    💡 Lichtquelle {lightOn ? 'an' : 'aus'}
                   </button>
                 </div>
-                {light.enabled && (
+                {lightOn && (
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-                      <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', minWidth: 80 }}>Radius in Feldern</label>
+                      <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', minWidth: 80 }}>Radius (Felder)</label>
                       <input
                         type="range" min={1} max={30}
-                        value={light.radius}
-                        onChange={(e) => {
-                          const newNotes = setLightInNotes(selected.notes, true, parseInt(e.target.value), light.color)
-                          handleUpdate(selected.id, { notes: newNotes })
-                        }}
+                        value={radius}
+                        onChange={(e) => handleUpdate(selected.id, { lightRadius: parseInt(e.target.value) })}
                         style={{ flex: 1 }}
                       />
-                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-primary)', minWidth: 24, textAlign: 'right' }}>{light.radius}</span>
+                      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-primary)', minWidth: 24, textAlign: 'right' }}>{radius}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
                       <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', minWidth: 80 }}>Farbe</label>
@@ -538,14 +525,11 @@ export function TokenPanel() {
                           <button
                             key={c.id}
                             title={c.id}
-                            onClick={() => {
-                              const newNotes = setLightInNotes(selected.notes, true, light.radius, c.hex)
-                              handleUpdate(selected.id, { notes: newNotes })
-                            }}
+                            onClick={() => handleUpdate(selected.id, { lightColor: c.hex })}
                             style={{
                               width: 22, height: 22, borderRadius: '50%',
                               background: c.hex,
-                              border: light.color === c.hex ? '2px solid var(--text-primary)' : '1px solid rgba(255,255,255,0.3)',
+                              border: color === c.hex ? '2px solid var(--text-primary)' : '1px solid rgba(255,255,255,0.3)',
                               cursor: 'pointer', padding: 0,
                             }}
                           />
@@ -553,7 +537,7 @@ export function TokenPanel() {
                       </div>
                     </div>
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                      Vorschau: <span style={{ color: light.color, textShadow: `0 0 6px ${light.color}` }}>○</span> Radius {light.radius}, {light.color}
+                      <span style={{ color, textShadow: `0 0 6px ${color}` }}>○</span> Radius {radius} Felder
                     </div>
                   </>
                 )}
@@ -677,4 +661,54 @@ function TokenThumbnail({ path }: { path: string }) {
   const url = useImageUrl(path)
   if (!url) return null
   return <img src={url} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+}
+
+// ─── Add to Initiative Button ─────────────────────────────────────────────────
+
+function AddToInitiativeButton({ token, mapId }: { token: TokenRecord; mapId: number | null }) {
+  const entries = useInitiativeStore((s) => s.entries)
+  const alreadyIn = entries.some((e) => e.tokenId === token.id || e.combatantName === token.name)
+
+  async function handleAdd() {
+    if (!mapId || !window.electronAPI) return
+    try {
+      const result = await window.electronAPI.dbRun(
+        'INSERT INTO initiative (map_id, combatant_name, roll, token_id) VALUES (?, ?, 0, ?)',
+        [mapId, token.name, token.id]
+      )
+      useInitiativeStore.getState().addEntry({
+        id: result.lastInsertRowid,
+        mapId,
+        combatantName: token.name,
+        roll: 0,
+        currentTurn: false,
+        tokenId: token.id,
+        effectTimers: null,
+      })
+      // Switch to initiative tab so user can set the roll
+      useUIStore.getState().setSidebarTab('initiative')
+    } catch (err) {
+      console.error('[TokenPanel] addToInitiative failed:', err)
+    }
+  }
+
+  if (alreadyIn) {
+    return (
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ color: 'var(--success)' }}>✓</span> In Initiative
+      </div>
+    )
+  }
+
+  return (
+    <button
+      className="btn btn-ghost"
+      style={{ fontSize: 'var(--text-xs)', justifyContent: 'flex-start', gap: 6 }}
+      onClick={handleAdd}
+      disabled={!mapId}
+      title="Token zur Initiative hinzufügen und Initiative-Tab öffnen"
+    >
+      ⚔️ Zur Initiative hinzufügen
+    </button>
+  )
 }

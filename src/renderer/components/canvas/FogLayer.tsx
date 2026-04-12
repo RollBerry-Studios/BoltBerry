@@ -14,9 +14,10 @@ interface FogLayerProps {
   canvasSize: { width: number; height: number }
   activeTool: ActiveTool
   gridSize: number
+  playerPreview?: boolean
 }
 
-export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: FogLayerProps) {
+export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize, playerPreview = false }: FogLayerProps) {
   const layerRef = useRef<Konva.Layer>(null)
 
   const exploredCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -71,6 +72,8 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     }
   }, [mapId, imgW, imgH])
 
+  const playerPreviewCanvasRef = useRef<HTMLCanvasElement | null>(null)
+
   // ── Create/update Konva.Image nodes ──────────────────────────────────
   const refreshDisplay = useCallback(() => {
     const explored = exploredCanvasRef.current
@@ -88,18 +91,41 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
     kE.x(offsetX); kE.y(offsetY)
     kE.width(imgW * scale); kE.height(imgH * scale)
 
+    // In player-preview mode, boost fog to full opacity so DM sees exactly what players see
+    let coveredSource: HTMLCanvasElement = covered
+    if (playerPreview) {
+      if (!playerPreviewCanvasRef.current) {
+        playerPreviewCanvasRef.current = document.createElement('canvas')
+      }
+      const pp = playerPreviewCanvasRef.current
+      if (pp.width !== covered.width || pp.height !== covered.height) {
+        pp.width = covered.width
+        pp.height = covered.height
+      }
+      const ppCtx = pp.getContext('2d')!
+      ppCtx.clearRect(0, 0, pp.width, pp.height)
+      ppCtx.drawImage(covered, 0, 0)
+      // Normalize: any pixel with non-zero alpha → full opacity black
+      const id = ppCtx.getImageData(0, 0, pp.width, pp.height)
+      for (let i = 0; i < id.data.length; i += 4) {
+        if (id.data[i + 3] > 0) { id.data[i] = 0; id.data[i+1] = 0; id.data[i+2] = 0; id.data[i+3] = 255 }
+      }
+      ppCtx.putImageData(id, 0, 0)
+      coveredSource = pp
+    }
+
     if (!kImgCoveredRef.current) {
-      const kImg = new Konva.Image({ image: covered, listening: false })
+      const kImg = new Konva.Image({ image: coveredSource, listening: false })
       kImgCoveredRef.current = kImg
       layer.add(kImg)
     }
     const kC = kImgCoveredRef.current
-    kC.image(covered)
+    kC.image(coveredSource)
     kC.x(offsetX); kC.y(offsetY)
     kC.width(imgW * scale); kC.height(imgH * scale)
 
     layer.batchDraw()
-  }, [offsetX, offsetY, imgW, imgH, scale])
+  }, [offsetX, offsetY, imgW, imgH, scale, playerPreview])
 
   useEffect(() => { refreshDisplay() }, [refreshDisplay])
 
@@ -132,6 +158,14 @@ export function FogLayer({ mapId, stageRef, canvasSize, activeTool, gridSize }: 
 
     refreshDisplay()
     saveFogToDb(mapId, explored, covered)
+
+    // Broadcast rebuilt fog to player so their view stays in sync after undo/redo
+    if (useUIStore.getState().sessionMode !== 'prep') {
+      window.electronAPI?.sendFogReset(
+        covered.toDataURL('image/jpeg', 0.85),
+        explored.toDataURL('image/jpeg', 0.85),
+      )
+    }
   }, [mapId, refreshDisplay])
 
   // ── Push fog operation to global undo stack ────────────────────────
@@ -496,8 +530,9 @@ function saveFogToDb(
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(async () => {
     try {
-      const fogBitmap      = coveredCanvas.toDataURL('image/png')
-      const exploredBitmap = exploredCanvas.toDataURL('image/png')
+      // JPEG (~4× smaller than PNG for typical fog bitmaps)
+      const fogBitmap      = coveredCanvas.toDataURL('image/jpeg', 0.85)
+      const exploredBitmap = exploredCanvas.toDataURL('image/jpeg', 0.85)
       await window.electronAPI?.dbRun(
         `INSERT INTO fog_state (map_id, fog_bitmap, explored_bitmap) VALUES (?, ?, ?)
          ON CONFLICT(map_id) DO UPDATE SET

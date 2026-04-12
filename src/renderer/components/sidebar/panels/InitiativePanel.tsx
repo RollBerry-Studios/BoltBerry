@@ -87,7 +87,7 @@ async function quickTokenUpdate(tokenId: number, updates: Record<string, any>) {
 
 export function InitiativePanel() {
   const { t } = useTranslation()
-  const { entries, round, addEntry, removeEntry, updateEntry, sortEntries, nextTurn, resetCombat, addTimer, removeTimer } = useInitiativeStore()
+  const { entries, round, addEntry, removeEntry, updateEntry, reorderEntries, sortEntries, nextTurn, resetCombat, addTimer, removeTimer } = useInitiativeStore()
   const { activeMapId } = useCampaignStore()
   const tokens = useTokenStore((s) => s.tokens)
   const [name, setName] = useState('')
@@ -99,6 +99,8 @@ export function InitiativePanel() {
   const [timerEntryId, setTimerEntryId] = useState<number | null>(null)
   const [timerEffect, setTimerEffect] = useState('blessed')
   const [timerRounds, setTimerRounds] = useState('10')
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const dragIndexRef = useRef<number | null>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const suggestionsRef = useRef<HTMLDivElement>(null)
 
@@ -377,7 +379,7 @@ export function InitiativePanel() {
             <div className="empty-state-title" style={{ fontSize: 'var(--text-sm)' }}>{t('initiative.noCombat')}</div>
           </div>
         ) : (
-          entries.map((entry) => {
+          entries.map((entry, entryIdx) => {
             const dotColor = getTokenFactionColor(entry.tokenId)
             const linkedToken = entry.tokenId != null ? mapTokens.find((t) => t.id === entry.tokenId) : null
             const hpRatio = linkedToken && linkedToken.hpMax > 0 ? Math.max(0, Math.min(1, linkedToken.hpCurrent / linkedToken.hpMax)) : -1
@@ -387,11 +389,27 @@ export function InitiativePanel() {
             return (
               <div
                 key={entry.id}
+                draggable
+                onDragStart={() => { dragIndexRef.current = entryIdx }}
+                onDragOver={(e) => { e.preventDefault(); setDragOverIndex(entryIdx) }}
+                onDragLeave={() => setDragOverIndex(null)}
+                onDrop={() => {
+                  if (dragIndexRef.current != null && dragIndexRef.current !== entryIdx) {
+                    reorderEntries(dragIndexRef.current, entryIdx)
+                    broadcastInitiative()
+                  }
+                  dragIndexRef.current = null
+                  setDragOverIndex(null)
+                }}
+                onDragEnd={() => { dragIndexRef.current = null; setDragOverIndex(null) }}
                 style={{
                   padding: 'var(--sp-2) var(--sp-4)',
                   borderBottom: '1px solid var(--border-subtle)',
                   background: entry.currentTurn ? 'var(--accent-dim)' : 'transparent',
                   borderLeft: entry.currentTurn ? '3px solid var(--accent)' : '3px solid transparent',
+                  outline: dragOverIndex === entryIdx ? '1px solid var(--accent-blue)' : undefined,
+                  cursor: 'grab',
+                  userSelect: 'none',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>

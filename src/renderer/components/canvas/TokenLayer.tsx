@@ -96,6 +96,27 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
   const isDraggable = activeTool === 'select'
   const sortedTokens = useMemo(() => [...tokens].sort((a, b) => a.zIndex - b.zIndex), [tokens])
 
+  const dragBroadcastLastRef = useRef(0)
+
+  // Throttled live-position broadcast during drag (100 ms interval)
+  const stableHandleDragMove = useCallback((token: TokenRecord, e: Konva.KonvaEventObject<DragEvent>) => {
+    const now = Date.now()
+    if (now - dragBroadcastLastRef.current < 100) return
+    dragBroadcastLastRef.current = now
+    const { tokens, selectedTokenIds, scale, offsetX, offsetY } = latestRef.current
+    const sx = e.target.x()
+    const sy = e.target.y()
+    const liveX = (sx - offsetX) / scale
+    const liveY = (sy - offsetY) / scale
+    const idsToMove = selectedTokenIds.includes(token.id) ? selectedTokenIds : [token.id]
+    const dx = liveX - token.x
+    const dy = liveY - token.y
+    const liveTokens = tokens.map((t) =>
+      idsToMove.includes(t.id) ? { ...t, x: t.x + dx, y: t.y + dy } : t
+    )
+    broadcastTokens(liveTokens)
+  }, [])
+
   const stableHandleDragEnd = useCallback(async (token: TokenRecord, e: Konva.KonvaEventObject<DragEvent>) => {
     const { tokens, selectedTokenIds, scale, offsetX, offsetY, gridSnap, map } = latestRef.current
     const sx = e.target.x()
@@ -600,12 +621,12 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
               isDraggable={isDraggable && !token.locked}
               isSelected={selectedTokenIds.includes(token.id)}
               isEditing={editingId === token.id}
-              editName={editName}
+              editName={editingId === token.id ? editName : ''}
               isEditingHp={editingHpId === token.id}
-              editHpCurrent={editHpCurrent}
-              editHpMax={editHpMax}
+              editHpCurrent={editingHpId === token.id ? editHpCurrent : ''}
+              editHpMax={editingHpId === token.id ? editHpMax : ''}
               isEditingAc={editingAcId === token.id}
-              editAc={editAc}
+              editAc={editingAcId === token.id ? editAc : ''}
               onEditNameChange={setEditName}
               onEditCommit={stableCommitEdit}
               onEditHpCurrentChange={setEditHpCurrent}
@@ -615,6 +636,7 @@ export function TokenLayer({ map, stageRef }: TokenLayerProps) {
               onEditAcCommit={stableCommitEditAc}
               onSelect={stableHandleSelect}
               onDblClick={stableStartEdit}
+              onDragMove={stableHandleDragMove}
               onDragEnd={stableHandleDragEnd}
               onContextMenu={stableHandleContextMenu}
             />
@@ -923,6 +945,7 @@ interface TokenNodeProps {
   onEditAcCommit: (id: number) => void
   onSelect: (tokenId: number, e?: Konva.KonvaEventObject<MouseEvent>) => void
   onDblClick: (token: TokenRecord) => void
+  onDragMove: (token: TokenRecord, e: Konva.KonvaEventObject<DragEvent>) => void
   onDragEnd: (token: TokenRecord, e: Konva.KonvaEventObject<DragEvent>) => void
   onContextMenu: (token: TokenRecord, e: Konva.KonvaEventObject<MouseEvent>) => void
 }
@@ -933,7 +956,7 @@ const TokenNode = memo(function TokenNode({
   onEditNameChange, onEditCommit,
   onEditHpCurrentChange, onEditHpMaxChange, onEditHpCommit,
   onEditAcChange, onEditAcCommit,
-  onSelect, onDblClick, onDragEnd, onContextMenu,
+  onSelect, onDblClick, onDragMove, onDragEnd, onContextMenu,
 }: TokenNodeProps) {
   const image = useImage(token.imagePath ? `file://${token.imagePath}` : null)
   const r = sizePx / 2
@@ -943,6 +966,7 @@ const TokenNode = memo(function TokenNode({
   // Internal handlers that bind token data to stable parent callbacks
   const handleClick = useCallback((e?: Konva.KonvaEventObject<MouseEvent>) => onSelect(token.id, e), [onSelect, token.id])
   const handleDblClick = useCallback(() => onDblClick(token), [onDblClick, token])
+  const handleDragMove = useCallback((e: Konva.KonvaEventObject<DragEvent>) => onDragMove(token, e), [onDragMove, token])
   const handleDrag = useCallback((e: Konva.KonvaEventObject<DragEvent>) => onDragEnd(token, e), [onDragEnd, token])
   const handleCtxMenu = useCallback((e: Konva.KonvaEventObject<MouseEvent>) => onContextMenu(token, e), [onContextMenu, token])
   const handleEditDone = useCallback(() => onEditCommit(token.id), [onEditCommit, token.id])
@@ -954,6 +978,7 @@ const TokenNode = memo(function TokenNode({
     <Group
       x={x} y={y}
       draggable={isDraggable}
+      onDragMove={handleDragMove}
       onDragEnd={handleDrag}
       onClick={handleClick}
       onDblClick={handleDblClick}
@@ -1189,7 +1214,28 @@ const TokenNode = memo(function TokenNode({
       )}
     </Group>
   )
-})
+}, (prev, next) => (
+  // Return true = equal = skip re-render
+  prev.token === next.token &&
+  prev.x === next.x &&
+  prev.y === next.y &&
+  prev.sizePx === next.sizePx &&
+  prev.isDraggable === next.isDraggable &&
+  prev.isSelected === next.isSelected &&
+  prev.isEditing === next.isEditing &&
+  prev.isEditingHp === next.isEditingHp &&
+  prev.isEditingAc === next.isEditingAc &&
+  // Only compare edit inputs for the token that is actively being edited
+  (!next.isEditing  || prev.editName === next.editName) &&
+  (!next.isEditingHp || (prev.editHpCurrent === next.editHpCurrent && prev.editHpMax === next.editHpMax)) &&
+  (!next.isEditingAc || prev.editAc === next.editAc) &&
+  // Stable callback refs (all defined with useCallback in parent)
+  prev.onSelect === next.onSelect &&
+  prev.onDblClick === next.onDblClick &&
+  prev.onDragMove === next.onDragMove &&
+  prev.onDragEnd === next.onDragEnd &&
+  prev.onContextMenu === next.onContextMenu
+))
 
 function broadcastTokens(tokens: TokenRecord[]) {
   if (useUIStore.getState().sessionMode === 'prep') return

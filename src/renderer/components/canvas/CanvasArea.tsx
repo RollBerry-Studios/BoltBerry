@@ -338,6 +338,7 @@ export function CanvasArea() {
             canvasSize={size}
             activeTool={activeTool}
             gridSize={activeMap.gridSize}
+            playerPreview={workMode === 'player-preview'}
           />
 
           {/* Layer 3: Tokens */}
@@ -392,7 +393,7 @@ export function CanvasArea() {
           />
 
           {/* Layer 11: Player Eye overlay (hidden tokens + stats) */}
-          {showPlayerEye && activeMap && (
+          {(showPlayerEye || workMode === 'player-preview') && activeMap && (
             <PlayerEyeOverlay
               map={activeMap}
               stageRef={stageRef}

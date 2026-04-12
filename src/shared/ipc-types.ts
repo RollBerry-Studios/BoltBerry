@@ -3,6 +3,7 @@ export const IPC = {
   // DM → Main → Player
   PLAYER_MAP_UPDATE: 'player:map-update',
   PLAYER_FOG_DELTA: 'player:fog-delta',
+  PLAYER_FOG_RESET: 'player:fog-reset',
   PLAYER_TOKEN_UPDATE: 'player:token-update',
   PLAYER_BLACKOUT: 'player:blackout',
   PLAYER_ATMOSPHERE: 'player:atmosphere',

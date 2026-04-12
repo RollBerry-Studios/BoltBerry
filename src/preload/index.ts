@@ -54,6 +54,8 @@ const dmApi = {
     ipcRenderer.send(IPC.PLAYER_MAP_UPDATE, state),
   sendFogDelta: (delta: FogDelta) =>
     ipcRenderer.send(IPC.PLAYER_FOG_DELTA, delta),
+  sendFogReset: (fogBitmap: string, exploredBitmap: string) =>
+    ipcRenderer.send(IPC.PLAYER_FOG_RESET, { fogBitmap, exploredBitmap }),
   sendTokenUpdate: (tokens: PlayerTokenState[]) =>
     ipcRenderer.send(IPC.PLAYER_TOKEN_UPDATE, tokens),
   sendBlackout: (active: boolean) =>
@@ -109,6 +111,11 @@ const playerApi = {
     const handler = (_: Electron.IpcRendererEvent, delta: FogDelta) => cb(delta)
     ipcRenderer.on(IPC.PLAYER_FOG_DELTA, handler)
     return () => ipcRenderer.removeListener(IPC.PLAYER_FOG_DELTA, handler)
+  },
+  onFogReset: (cb: (payload: { fogBitmap: string; exploredBitmap: string }) => void) => {
+    const handler = (_: Electron.IpcRendererEvent, payload: { fogBitmap: string; exploredBitmap: string }) => cb(payload)
+    ipcRenderer.on(IPC.PLAYER_FOG_RESET, handler)
+    return () => ipcRenderer.removeListener(IPC.PLAYER_FOG_RESET, handler)
   },
   onTokenUpdate: (cb: (tokens: PlayerTokenState[]) => void) => {
     const handler = (_: Electron.IpcRendererEvent, tokens: PlayerTokenState[]) => cb(tokens)

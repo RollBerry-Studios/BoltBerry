@@ -41,6 +41,11 @@ export function registerPlayerBridgeHandlers(): void {
     getPlayerWindow()?.webContents.send(IPC.PLAYER_FOG_DELTA, delta)
   })
 
+  // Fog full reset (after undo — sends both bitmaps)
+  ipcMain.on(IPC.PLAYER_FOG_RESET, (_event, payload: { fogBitmap: string; exploredBitmap: string }) => {
+    getPlayerWindow()?.webContents.send(IPC.PLAYER_FOG_RESET, payload)
+  })
+
   // Token update (only player-visible tokens)
   ipcMain.on(IPC.PLAYER_TOKEN_UPDATE, (_event, tokens: PlayerTokenState[]) => {
     getPlayerWindow()?.webContents.send(IPC.PLAYER_TOKEN_UPDATE, tokens)

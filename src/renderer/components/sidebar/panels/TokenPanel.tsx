@@ -389,15 +389,40 @@ export function TokenPanel() {
                   onChange={(e) => handleUpdate(selected.id, { hpMax: parseInt(e.target.value) || 0 })}
                   placeholder="HP max" />
               </div>
-              {/* Size + visibility + AC */}
+              {/* Size presets (D&D 5e grid squares) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Größe</label>
+                <div style={{ display: 'flex', gap: 3 }}>
+                  {([
+                    { label: '1×1', title: 'Klein/Mittel (1 Feld)', size: 1 },
+                    { label: '2×2', title: 'Groß (Large)',           size: 2 },
+                    { label: '3×3', title: 'Riesig (Huge)',          size: 3 },
+                    { label: '4×4', title: 'Kolossal (Gargantuan)', size: 4 },
+                  ] as { label: string; title: string; size: number }[]).map(({ label, title, size }) => (
+                    <button
+                      key={size}
+                      title={title}
+                      onClick={() => handleUpdate(selected.id, { size })}
+                      style={{
+                        flex: 1,
+                        padding: '3px 0',
+                        fontSize: 10,
+                        fontWeight: selected.size === size ? 700 : 400,
+                        background: selected.size === size ? 'var(--accent-blue-dim)' : 'var(--bg-overlay)',
+                        border: selected.size === size ? '1px solid var(--accent-blue)' : '1px solid var(--border)',
+                        borderRadius: 3,
+                        color: selected.size === size ? 'var(--accent-blue-light)' : 'var(--text-primary)',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* AC + visibility */}
               <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Gr.</label>
-                <select className="input" value={selected.size}
-                  onChange={(e) => handleUpdate(selected.id, { size: parseInt(e.target.value) })}
-                  style={{ width: 'auto' }}>
-                  {[1,2,3,4].map(s => <option key={s} value={s}>{s}×{s}</option>)}
-                </select>
-                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginLeft: 'var(--sp-1)' }}>RK</label>
+                <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>RK</label>
                 <input className="input" type="number"
                   value={selected.ac ?? ''}
                   onChange={(e) => handleUpdate(selected.id, { ac: e.target.value ? parseInt(e.target.value) : null })}

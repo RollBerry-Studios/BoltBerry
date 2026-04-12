@@ -168,6 +168,16 @@ export default function PlayerApp() {
         setFogVersion((v) => v + 1)
       }),
 
+      window.playerAPI.onFogReset((payload) => {
+        loadDualFog(
+          payload.fogBitmap,
+          payload.exploredBitmap,
+          coveredCanvasRef,
+          exploredCanvasRef,
+          () => setFogVersion((v) => v + 1),
+        )
+      }),
+
       window.playerAPI.onMeasure((m: PlayerMeasureState | null) => {
         setMeasure(m)
       }),
